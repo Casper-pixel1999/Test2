@@ -40,7 +40,7 @@ interface Worker {
 interface Customer {
   x: number; z: number;
   state: 'queue' | 'toTable' | 'eating' | 'leave';
-  patience: number; order: number;
+  patience: number; patienceMax: number; order: number;
   shirt: string; skin: string; hair: string; shape: number;
   table: any; eatTime: number; facing: number;
 }
@@ -80,6 +80,17 @@ export class Game {
   _lastFsAt = -999;
   _cloudTimer = 0;
   bubbleEls = new Map<Customer, HTMLDivElement>();
+  _tutorialStepAt = 0;
+  _stuckHintShown = false;
+  _shopPointOnce = false;
+  _pattiesAwayT = 0;
+  _burgersAwayT = 0;
+  _lastSoftHintAt = -999;
+  _softHintTarget: { x: number; z: number } | null = null;
+  _softHintLife = 0;
+  _approachFade = 0;
+  _prevReady: boolean[] = [false, false, false];
+  _activePadKind: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.world = new World3D(canvas);
@@ -147,13 +158,26 @@ export class Game {
 
   playerSpeed() { return 4.2 + this.state.speedLv * 0.55; }
   carryCap() { return 3 + this.state.capLv; }
+  isTraining() { return !this.state.tutorialDone || this.state.totalServed < 3; }
   profitMult() {
     let m = 1 + this.state.profitLv * 0.25;
     if (this.time < this.doubleProfitUntil) m *= 2;
     return m;
   }
-  grillCookTime() { return Math.max(1.2, 3.2 - this.state.grillLv * 0.35); }
-  orderPay() { return Math.floor(12 * this.profitMult()); }
+  /** First cook ~2.4s in tutorial/training; ~3.0s base after (outside zone) */
+  grillCookTime() {
+    const base = this.isTraining() ? 2.4 : 3.0;
+    return Math.max(1.15, base - this.state.grillLv * 0.35);
+  }
+  /** First 3 orders 15×, then 12× */
+  orderPay() {
+    const base = this.state.totalServed < 3 ? 15 : 12;
+    return Math.floor(base * this.profitMult());
+  }
+  /** Patience start 34s, -2s every 5 customers, floor 22s */
+  patienceStart() {
+    return Math.max(22, 34 - 2 * Math.floor(this.state.totalServed / 5));
+  }
 
   load() {
     try {
@@ -200,6 +224,8 @@ export class Game {
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, 0, false);
     this.running = true;
     this.paused = false;
+    this.spawnTimer = this.isTraining() ? 1.0 : 2.5;
+    this._tutorialStepAt = 0;
     this.lastTs = performance.now();
     gameplayStart();
     requestAnimationFrame((ts) => this.loop(ts));
@@ -289,6 +315,7 @@ export class Game {
     this.updateCustomers(dt);
     this.updateWorkers(dt);
     this.updateTutorial();
+    this.updateApproachPrompt();
     this.world.updateSmoke(dt);
     this._saveTimer += dt;
     if (this._saveTimer > 3) {
@@ -366,8 +393,7 @@ export class Game {
     ];
     for (const tb of this.world.tables) {
       if (tb.unlocked && tb.dirty) {
-        // stand in front of table (slightly toward kitchen / -z)
-        list.push({ x: tb.x, z: tb.z - 1.05, r: 1.05, kind: 'table', color: 0x5dade2 });
+        list.push({ x: tb.x, z: tb.z - 1.05, r: 1.2, kind: 'table', color: 0x5dade2 });
       }
     }
     let best: typeof list[0] | null = null;
@@ -387,7 +413,7 @@ export class Game {
   inPrepZone() { return this.nearPad(this.layout.prep.interact); }
   inCounterZone() { return this.nearPad(this.layout.counter.interact); }
   inTableZone(tb: { x: number; z: number }) {
-    return dist(this.player, { x: tb.x, z: tb.z - 1.05 }) < 1.05;
+    return dist(this.player, { x: tb.x, z: tb.z - 1.05 }) < 1.2;
   }
 
   autoInteract(_dt: number) {
@@ -395,7 +421,7 @@ export class Game {
     const prep = this.layout.prep;
     const counter = this.layout.counter;
 
-    // Grill zone: only while standing in the circle — start empty slots & pick ready
+    // Grill zone: start empty slots & auto-pick ready (AFK cook handled in updateGrill)
     if (this.inGrillZone()) {
       for (const s of g.slots) {
         if (s.state === 'empty') {
@@ -443,16 +469,19 @@ export class Game {
       if (this.tutorialStep <= 3) this.tutorialStep = 4;
     }
 
-    // Dirty tables: clean only while in front-zone
+    // Dirty tables: clean only while in front-zone (r=1.2)
     for (const tb of this.world.tables) {
       if (!tb.unlocked || !tb.dirty) continue;
       if (this.inTableZone(tb)) {
         tb.dirty = false;
         this.state.cash += 3;
         this.float('+$3', tb.x, tb.z, '#2ecc71');
+        this.world.punchTableClean(tb);
+        this.float('✨', tb.x, tb.z, '#f1c40f');
         if (this.tutorialStep <= 4) {
           this.tutorialStep = 5;
           this.state.tutorialDone = true;
+          this._shopPointOnce = false;
         }
       }
     }
@@ -461,19 +490,33 @@ export class Game {
   tryInteract() { this.autoInteract(0); }
 
   updateGrill(dt: number) {
-    // Meat cooks ONLY while player stands in the grill circle; leave = pause
-    if (!this.inGrillZone()) return;
-    const need = this.grillCookTime();
-    for (const s of this.layout.grill.slots) {
-      if (s.state === 'cooking') {
-        s.progress += dt;
-        if (s.progress >= need) {
-          s.state = 'ready';
-          s.progress = need;
-          if (this.tutorialStep === 0) this.tutorialStep = 1;
+    const inZone = this.inGrillZone();
+    const done = this.state.tutorialDone;
+    // Tutorial: cook ONLY in zone. After tutorial: cook ALWAYS (AFK).
+    if (!done && !inZone) return;
+    // After tutorial, keep empty slots cooking even AFK
+    if (done) {
+      for (const s of this.layout.grill.slots) {
+        if (s.state === 'empty') {
+          s.state = 'cooking';
+          s.progress = 0;
+          break;
         }
       }
     }
+    const rate = (done && inZone) ? 1.35 : 1;
+    const need = this.grillCookTime();
+    this.layout.grill.slots.forEach((s, i) => {
+      if (s.state === 'cooking') {
+        s.progress += dt * rate;
+        if (s.progress >= need) {
+          s.state = 'ready';
+          s.progress = need;
+          this.world.punchGrillReady(i);
+          if (this.tutorialStep === 0) this.tutorialStep = 1;
+        }
+      }
+    });
   }
 
 
@@ -483,10 +526,13 @@ export class Game {
     const waiting = this.customers.filter((c) => c.state === 'queue').length;
     const maxQueue = Math.min(4, 1 + Math.floor(this.state.tablesUnlocked / 2));
     if (this.spawnTimer <= 0 && waiting < maxQueue) {
-      this.spawnTimer = Math.max(1.5, 4.5 - this.state.tablesUnlocked * 0.25);
+      // Faster early spawns so first cash ≤75s is reachable
+      const baseGap = this.isTraining() ? 2.6 : 4.5;
+      this.spawnTimer = Math.max(1.2, baseGap - this.state.tablesUnlocked * 0.25);
+      const pat = this.patienceStart();
       this.customers.push({
         x: -0.6, z: 5.5, state: 'queue',
-        patience: 28, order: 1,
+        patience: pat, patienceMax: pat, order: 1,
         shirt: `hsl(${(Math.random() * 360) | 0},62%,56%)`,
         skin: SKINS[(Math.random() * SKINS.length) | 0],
         hair: `hsl(${(Math.random() * 40 + 8) | 0},38%,${(18 + Math.random() * 22) | 0}%)`,
@@ -499,7 +545,7 @@ export class Game {
       const spot = this.world.queueSpots[Math.min(i, this.world.queueSpots.length - 1)];
       c.x = lerp(c.x, spot.x, 1 - Math.pow(0.001, dt));
       c.z = lerp(c.z, spot.z, 1 - Math.pow(0.001, dt));
-      c.patience -= dt * 0.15;
+      c.patience -= dt;
     });
     const counter = this.layout.counter;
     if (counter.burgers > 0 && queued.length) {
@@ -626,18 +672,109 @@ export class Game {
 
   updateTutorial() {
     const arrow = document.getElementById('tutorialArrow');
+    arrow?.classList.add('hidden');
+
+    // Track step enter time for stuck detection
+    if ((this as any)._lastTutStep !== this.tutorialStep) {
+      (this as any)._lastTutStep = this.tutorialStep;
+      this._tutorialStepAt = this.time;
+      this._stuckHintShown = false;
+    }
+
     if (this.state.tutorialDone || this.tutorialStep >= 5) {
-      this.hintKey = this.world.tables.some((tb) => tb.dirty) ? 'hintClean' : 'hintIdle';
-      arrow?.classList.add('hidden');
+      // Once after step 5: point to shop (not mandatory)
+      if (!this._shopPointOnce) {
+        this._shopPointOnce = true;
+        this.hintKey = 'hintUpgrade';
+        document.getElementById('btnShop')?.classList.add('pulse-once');
+        setTimeout(() => document.getElementById('btnShop')?.classList.remove('pulse-once'), 3500);
+      } else if (this._softHintLife <= 0) {
+        this.hintKey = this.world.tables.some((tb) => tb.dirty) ? 'hintClean' : 'hintIdle';
+      }
+      this.updateSoftChainHints();
       return;
     }
+
     const keys = ['hintCook', 'hintPick', 'hintStack', 'hintServe', 'hintClean'];
     this.hintKey = keys[Math.min(this.tutorialStep, keys.length - 1)];
     if (this.tutorialStep === 4 && !this.world.tables.some((tb) => tb.dirty)) {
       this.hintKey = 'hintWait';
     }
-    // 3D arrow used instead of DOM
-    arrow?.classList.add('hidden');
+    // Stuck ≥20s: pulse target + soft "иди сюда"
+    if (this.time - this._tutorialStepAt >= 20) {
+      this.hintKey = 'goHere';
+      this._stuckHintShown = true;
+    }
+  }
+
+  updateSoftChainHints() {
+    if (!this.state.tutorialDone) return;
+    const dt = this.dt;
+    if (this.player.patties > 0 && !this.inPrepZone()) this._pattiesAwayT += dt;
+    else this._pattiesAwayT = 0;
+    if (this.player.burgers > 0 && !this.inCounterZone()) this._burgersAwayT += dt;
+    else this._burgersAwayT = 0;
+
+    if (this._softHintLife > 0) {
+      this._softHintLife -= dt;
+      if (this._softHintLife <= 0) this._softHintTarget = null;
+    }
+
+    if (this.time - this._lastSoftHintAt < 8) return;
+
+    if (this._pattiesAwayT > 4) {
+      this.hintKey = 'hintStack';
+      this._softHintTarget = { ...this.layout.prep.interact };
+      this._softHintLife = 3.5;
+      this._lastSoftHintAt = this.time;
+      this._pattiesAwayT = 0;
+    } else if (this._burgersAwayT > 4) {
+      this.hintKey = 'hintServe';
+      this._softHintTarget = { ...this.layout.counter.interact };
+      this._softHintLife = 3.5;
+      this._lastSoftHintAt = this.time;
+      this._burgersAwayT = 0;
+    }
+  }
+
+  updateApproachPrompt() {
+    const pads: { x: number; z: number; r: number; kind: string }[] = [
+      { ...this.layout.grill.interact, kind: 'grill' },
+      { ...this.layout.prep.interact, kind: 'prep' },
+      { ...this.layout.counter.interact, kind: 'counter' },
+    ];
+    this.world.tables.forEach((tb, i) => {
+      if (tb.unlocked && tb.dirty) {
+        pads.push({ x: tb.x, z: tb.z - 1.05, r: 1.2, kind: `table-${i}` });
+      }
+    });
+    let best: typeof pads[0] | null = null;
+    let bestD = 1e9;
+    for (const p of pads) {
+      const d = dist(this.player, p);
+      if (d < bestD) { best = p; bestD = d; }
+    }
+    this._activePadKind = null;
+    let approach: { x: number; z: number } | null = null;
+    if (best) {
+      if (bestD < best.r) {
+        this._activePadKind = best.kind;
+        this._approachFade = Math.max(0, this._approachFade - this.dt / 0.25);
+      } else if (bestD < best.r + 0.35) {
+        approach = best;
+        this._approachFade = Math.min(1, this._approachFade + this.dt / 0.4);
+      } else {
+        this._approachFade = Math.max(0, this._approachFade - this.dt / 0.35);
+      }
+    } else {
+      this._approachFade = Math.max(0, this._approachFade - this.dt / 0.35);
+    }
+    this.world.setStationHighlight(this._activePadKind);
+    if (approach && this._approachFade > 0.05) {
+      this.world.setApproachHint(approach.x, approach.z, this._approachFade);
+    } else {
+      this.world.setApproachHint(null, null, 0);
+    }
   }
 
   float(text: string, x: number, z: number, color = '#fff') {
@@ -676,7 +813,7 @@ export class Game {
       if (ico) ico.textContent = c.state === 'toTable' ? '😋' : '🍔';
       const bar = el.querySelector('.patience > i') as HTMLElement | null;
       if (bar) {
-        const p = clamp(c.patience / 28, 0, 1);
+        const p = clamp(c.patience / (c.patienceMax || 34), 0, 1);
         bar.style.width = `${p * 100}%`;
         bar.style.background = patienceColor(p);
         (el.querySelector('.patience') as HTMLElement).style.display =
@@ -690,10 +827,10 @@ export class Game {
   }
 
   syncWorld() {
-    this.world.syncGrill(this.layout.grill.slots, this.grillCookTime(), this.time);
+    this.world.syncGrill(this.layout.grill.slots, this.grillCookTime(), this.time, this.dt);
     this.world.syncPrep(this.layout.prep.patties, this.layout.prep.burgers);
     this.world.syncCounter(this.layout.counter.burgers);
-    this.world.syncTables();
+    this.world.syncTables(this.dt);
     this.world.syncCustomers(this.customers, this.time);
     this.world.syncWorkers(this.workers);
     this.world.updatePlayerStack(this.player.patties, this.player.burgers);
@@ -702,9 +839,25 @@ export class Game {
     if (focus) this.world.setFocus(focus.x, focus.z, focus.color);
     else this.world.setFocus(0, 0, null);
 
+    this.world.updateInteractPads(this._activePadKind, this.time);
+
+    const stuckPulse = !this.state.tutorialDone && this.time - this._tutorialStepAt >= 20;
     const tgt = this.tutorialTarget();
-    if (tgt) this.world.setTutorialTarget(tgt.x, tgt.z, this.time);
-    else this.world.setTutorialTarget(null, null, this.time);
+    if (tgt) {
+      this.world.setTutorialTarget(tgt.x, tgt.z, this.time);
+      if (stuckPulse) {
+        // amplify focus pulse via focus ring on target
+        this.world.setFocus(tgt.x, tgt.z, 0xffe566);
+      }
+    } else {
+      this.world.setTutorialTarget(null, null, this.time);
+    }
+
+    if (this._softHintTarget && this._softHintLife > 0) {
+      this.world.setSoftHintTarget(this._softHintTarget.x, this._softHintTarget.z, this.time);
+    } else {
+      this.world.setSoftHintTarget(null, null, this.time);
+    }
 
     this.syncBubbles();
 
@@ -732,7 +885,8 @@ export class Game {
       cash.textContent = `${t('cash')} ${Math.floor(this.state.cash)}${bonus}`;
     }
     if (carry && this.player) {
-      carry.textContent = `🍖 ${this.player.patties}  ·  🍔 ${this.player.burgers}  /  ${this.carryCap()}`;
+      const cap = this.carryCap();
+      carry.textContent = `🍖 ${this.player.patties}/${cap}  ·  🍔 ${this.player.burgers}/${cap}`;
     }
     if (hint) hint.textContent = t(this.hintKey);
     if (stepEl && banner) {
@@ -800,6 +954,8 @@ export class Game {
     this.shopOpen = false;
     document.getElementById('shop')?.classList.add('hidden');
     if (!this.paused) gameplayStart();
+    // Do not fire fullscreen interstitial during tutorial
+    if (!this.state.tutorialDone) return;
     if (this.time - this._lastFsAt > 90) {
       this._lastFsAt = this.time;
       await showFullscreen();

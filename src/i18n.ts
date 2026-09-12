@@ -45,6 +45,9 @@ const STRINGS: Record<string, Record<string, string>> = {
     promptInteract: 'E / нажми',
     dirtyLabel: 'ГРЯЗНО!',
     readyLabel: 'ГОТОВО',
+    approachCloser: 'подойди ближе',
+    goHere: 'иди сюда',
+    zoneClean: 'УБОРКА',
   },
   en: {
     loading: 'Loading…',
@@ -91,6 +94,9 @@ const STRINGS: Record<string, Record<string, string>> = {
     promptInteract: 'E / tap',
     dirtyLabel: 'DIRTY!',
     readyLabel: 'READY',
+    approachCloser: 'come closer',
+    goHere: 'come here',
+    zoneClean: 'CLEAN',
   },
 };
 

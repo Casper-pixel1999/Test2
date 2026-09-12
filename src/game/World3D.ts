@@ -16,12 +16,17 @@ export interface TableData {
   cloth: THREE.Mesh;
   lockIcon: THREE.Sprite;
   dirtyFX: THREE.Mesh;
+  dirtyLabel: THREE.Sprite;
+  cleanPunchT: number;
 }
 
 export interface GrillSlotVis {
   patty: THREE.Mesh;
   ring: THREE.Mesh;
   progress: THREE.Mesh;
+  bang: THREE.Sprite;
+  baseScale: number;
+  punchT: number;
 }
 
 export class World3D {
@@ -44,8 +49,18 @@ export class World3D {
   counterStack: THREE.Group;
   focusRing!: THREE.Mesh;
   tutorialArrow!: THREE.Group;
+  softHintArrow!: THREE.Group;
+  interactPads: {
+    kind: string;
+    ring: THREE.Mesh;
+    disc: THREE.Mesh;
+    ringMat: THREE.MeshBasicMaterial;
+    discMat: THREE.MeshBasicMaterial;
+    baseOuter: number;
+  }[] = [];
   smoke: { mesh: THREE.Mesh; life: number; vy: number }[] = [];
   titleSprite!: THREE.Sprite;
+  approachSprite!: THREE.Sprite;
 
   playerMesh!: THREE.Group;
   playerStack!: THREE.Group;
@@ -243,8 +258,12 @@ export class World3D {
       progress.rotation.x = -Math.PI / 2;
       progress.position.set(sx, 0.93, 0);
       progress.visible = false;
-      this.grillGroup.add(pan, patty, ring, progress);
-      this.grillSlots.push({ patty, ring, progress });
+      const bang = this.makeTextSprite('!', { fontSize: 72, color: '#ffe566' });
+      bang.position.set(sx, 1.35, 0);
+      bang.scale.set(0.55, 0.55, 1);
+      bang.visible = false;
+      this.grillGroup.add(pan, patty, ring, progress, bang);
+      this.grillSlots.push({ patty, ring, progress, bang, baseScale: 1, punchT: 0 });
     }
     const grillLabel = this.makeTextSprite('🔥 ' + t('zoneGrill'), { fontSize: 36, color: '#ffd0c0' });
     grillLabel.position.set(0, 1.6, 0);
@@ -310,13 +329,19 @@ export class World3D {
       const leg3 = leg1.clone(); leg3.position.set(-0.5, 0, 0.5);
       const leg4 = leg1.clone(); leg4.position.set(0.5, 0, 0.5);
       const cloth = box(1.1, 0.04, 1.1, 0x5d8aa8, 0.67);
-      const dirtyFX = box(1.1, 0.05, 1.1, 0x6b3a1f, 0.68);
+      const dirtyFX = box(1.15, 0.08, 1.15, 0x4a2208, 0.68);
+      (dirtyFX.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x331100);
+      (dirtyFX.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.45;
       dirtyFX.visible = false;
+      const dirtyLabel = this.makeTextSprite('🤢 ' + t('dirtyLabel'), { fontSize: 36, color: '#ffcc88' });
+      dirtyLabel.position.set(0, 1.35, 0);
+      dirtyLabel.scale.set(1.6, 0.45, 1);
+      dirtyLabel.visible = false;
       const lockIcon = this.makeTextSprite('🔒', { fontSize: 64, color: '#ffffff' });
       lockIcon.position.set(0, 1.2, 0);
       lockIcon.scale.set(0.8, 0.8, 1);
       lockIcon.visible = i !== 0;
-      mesh.add(top, leg1, leg2, leg3, leg4, cloth, dirtyFX, lockIcon);
+      mesh.add(top, leg1, leg2, leg3, leg4, cloth, dirtyFX, dirtyLabel, lockIcon);
       this.root.add(mesh);
       this.tables.push({
         x, z,
@@ -327,6 +352,8 @@ export class World3D {
         cloth,
         lockIcon,
         dirtyFX,
+        dirtyLabel,
+        cleanPunchT: 0,
       });
     });
 
@@ -362,29 +389,46 @@ export class World3D {
     this.tutorialArrow.add(cone);
     this.tutorialArrow.visible = false;
     this.root.add(this.tutorialArrow);
+
+    this.softHintArrow = new THREE.Group();
+    const softCone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28, 0.55, 4),
+      new THREE.MeshBasicMaterial({ color: 0xa8d8ff, transparent: true, opacity: 0.55 }),
+    );
+    softCone.rotation.x = Math.PI;
+    this.softHintArrow.add(softCone);
+    this.softHintArrow.visible = false;
+    this.root.add(this.softHintArrow);
+
+    this.approachSprite = this.makeTextSprite(t('approachCloser'), { fontSize: 34, color: '#ffe9b0' });
+    this.approachSprite.position.set(0, 1.1, 0);
+    this.approachSprite.scale.set(2.2, 0.5, 1);
+    this.approachSprite.visible = false;
+    this.root.add(this.approachSprite);
   }
 
 
   buildInteractPads() {
     // Floor top is ~y=0.06 — pads MUST sit above it or they are invisible (z-fight / inside mesh)
-    type Pad = { x: number; z: number; color: number; r?: number };
+    type Pad = { x: number; z: number; color: number; r?: number; kind: string };
     const pads: Pad[] = [
-      { x: -6, z: -1.1, color: 0xff6b35 },        // grill (front)
-      { x: -6, z: 2.1, color: 0xf1c40f },         // prep / assembly
-      { x: -0.7, z: 0.2, color: 0x2ecc71 },       // counter (customer/kitchen approach on +x side)
-      { x: -7.2, z: 3.1, color: 0xf1c40f, r: 0.9 },
+      { x: -6, z: -1.1, color: 0xff6b35, kind: 'grill' },
+      { x: -6, z: 2.1, color: 0xf1c40f, kind: 'prep' },
+      { x: -0.7, z: 0.2, color: 0x2ecc71, kind: 'counter' },
+      { x: -7.2, z: 3.1, color: 0xf1c40f, r: 0.9, kind: 'trash' },
     ];
-    for (const tb of this.tables) {
-      pads.push({ x: tb.x, z: tb.z - 1.05, color: 0x5dade2, r: 0.95 });
-    }
+    this.tables.forEach((tb, i) => {
+      pads.push({ x: tb.x, z: tb.z - 1.05, color: 0x5dade2, r: 1.15, kind: `table-${i}` });
+    });
     const y = 0.13;
+    this.interactPads = [];
     for (const p of pads) {
       const outer = p.r ?? 1.05;
       const inner = outer * 0.62;
       const matRing = new THREE.MeshBasicMaterial({
         color: p.color,
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.55,
         side: THREE.DoubleSide,
         depthTest: false,
         depthWrite: false,
@@ -398,7 +442,7 @@ export class World3D {
       const matDisc = new THREE.MeshBasicMaterial({
         color: p.color,
         transparent: true,
-        opacity: 0.35,
+        opacity: 0.22,
         side: THREE.DoubleSide,
         depthTest: false,
         depthWrite: false,
@@ -408,7 +452,77 @@ export class World3D {
       disc.position.set(p.x, y - 0.005, p.z);
       disc.renderOrder = 19;
       this.root.add(disc);
+      this.interactPads.push({
+        kind: p.kind,
+        ring,
+        disc,
+        ringMat: matRing,
+        discMat: matDisc,
+        baseOuter: outer,
+      });
     }
+  }
+
+  /** Active pad brightest + ~1.2Hz pulse; others dimmer */
+  updateInteractPads(activeKind: string | null, time: number) {
+    const pulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(time * Math.PI * 2 * 1.2));
+    for (const p of this.interactPads) {
+      const active = !!activeKind && p.kind === activeKind;
+      p.ringMat.opacity = active ? 0.55 + 0.4 * pulse : 0.32;
+      p.discMat.opacity = active ? 0.28 + 0.22 * pulse : 0.12;
+      const s = active ? 1 + 0.08 * pulse : 0.92;
+      p.ring.scale.set(s, s, s);
+      p.disc.scale.set(s, s, s);
+    }
+  }
+
+  setApproachHint(x: number | null, z: number | null, opacity: number) {
+    if (x == null || z == null || opacity <= 0.02) {
+      this.approachSprite.visible = false;
+      return;
+    }
+    this.updateSpriteText(this.approachSprite, t('approachCloser'));
+    this.approachSprite.visible = true;
+    this.approachSprite.position.set(x, 1.15, z);
+    (this.approachSprite.material as THREE.SpriteMaterial).opacity = Math.min(1, opacity);
+  }
+
+  setSoftHintTarget(x: number | null, z: number | null, time: number) {
+    if (x == null || z == null) {
+      this.softHintArrow.visible = false;
+      return;
+    }
+    this.softHintArrow.visible = true;
+    const bob = Math.sin(time * 3.6) * 0.18;
+    this.softHintArrow.position.set(x, 2.0 + bob, z);
+  }
+
+  setStationHighlight(kind: string | null) {
+    const boost = (group: THREE.Group, on: boolean, color: number) => {
+      group.traverse((obj) => {
+        const m = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (!m || !('emissive' in m)) return;
+        if (on) {
+          m.emissive.setHex(color);
+          m.emissiveIntensity = 0.35;
+        } else if (m.userData._baseEmissive == null) {
+          m.emissive.setHex(0x000000);
+          m.emissiveIntensity = 0;
+        }
+      });
+    };
+    boost(this.grillGroup, kind === 'grill', 0xff5520);
+    boost(this.prepGroup, kind === 'prep', 0xc9a000);
+    boost(this.counterGroup, kind === 'counter', 0x1e8449);
+  }
+
+  punchGrillReady(slotIndex: number) {
+    const v = this.grillSlots[slotIndex];
+    if (v) v.punchT = 0.35;
+  }
+
+  punchTableClean(tb: TableData) {
+    tb.cleanPunchT = 0.28;
   }
 
   followCamera(px: number, pz: number, dt: number) {
@@ -484,26 +598,31 @@ export class World3D {
     }
   }
 
-  syncGrill(slots: { state: string; progress: number }[], cookNeed: number, time: number) {
+  syncGrill(slots: { state: string; progress: number }[], cookNeed: number, time: number, dt = 0.016) {
     slots.forEach((s, i) => {
       const v = this.grillSlots[i];
       if (!v) return;
+      if (v.punchT > 0) v.punchT = Math.max(0, v.punchT - dt);
+      const punchScale = v.punchT > 0 ? 1 + Math.sin((1 - v.punchT / 0.35) * Math.PI) * 0.35 : 1;
       if (s.state === 'empty') {
         v.patty.visible = false;
         v.ring.visible = false;
         v.progress.visible = false;
+        v.bang.visible = false;
+        v.patty.scale.setScalar(1);
       } else {
         v.patty.visible = true;
+        v.patty.scale.setScalar(punchScale);
         (v.patty.material as THREE.MeshStandardMaterial).color.setHex(
           s.state === 'ready' ? 0x6b3a12 : 0xc0392b,
         );
         if (s.state === 'cooking') {
           v.progress.visible = true;
           v.ring.visible = false;
+          v.bang.visible = false;
           const frac = Math.min(1, s.progress / cookNeed);
           v.progress.geometry.dispose();
           v.progress.geometry = new THREE.RingGeometry(0.32, 0.38, 24, 1, -Math.PI / 2, Math.PI * 2 * frac);
-          // smoke
           if (Math.random() < 0.08) this.spawnSmoke(
             this.grillGroup.position.x + v.patty.position.x,
             1.1,
@@ -512,8 +631,12 @@ export class World3D {
         } else if (s.state === 'ready') {
           v.progress.visible = false;
           v.ring.visible = true;
+          v.bang.visible = true;
           const pulse = 0.55 + Math.sin(time * 8) * 0.35;
           (v.ring.material as THREE.MeshBasicMaterial).opacity = pulse;
+          const bob = 1.35 + Math.sin(time * 10) * 0.08;
+          v.bang.position.y = bob;
+          (v.bang.material as THREE.SpriteMaterial).opacity = 0.75 + pulse * 0.25;
         }
       }
     });
@@ -536,14 +659,28 @@ export class World3D {
     }
   }
 
-  syncTables() {
+  syncTables(dt = 0.016) {
     for (const tb of this.tables) {
       tb.lockIcon.visible = !tb.unlocked;
       tb.cloth.visible = tb.unlocked && !tb.dirty;
       tb.dirtyFX.visible = tb.unlocked && tb.dirty;
+      tb.dirtyLabel.visible = tb.unlocked && tb.dirty;
+      if (tb.dirty && tb.dirtyLabel.visible) {
+        tb.dirtyLabel.position.y = 1.35 + Math.sin(this.clock * 6) * 0.06;
+      }
       const top = tb.mesh.children[0] as THREE.Mesh;
       if (top?.material) {
-        (top.material as THREE.MeshStandardMaterial).color.setHex(tb.dirty ? 0x6b3a1f : 0xa67c52);
+        const mat = top.material as THREE.MeshStandardMaterial;
+        mat.color.setHex(tb.dirty ? 0x4a2208 : 0xa67c52);
+        mat.emissive.setHex(tb.dirty ? 0x221000 : 0x000000);
+        mat.emissiveIntensity = tb.dirty ? 0.35 : 0;
+      }
+      if (tb.cleanPunchT > 0) {
+        tb.cleanPunchT = Math.max(0, tb.cleanPunchT - dt);
+        const k = Math.sin((1 - tb.cleanPunchT / 0.28) * Math.PI) * 0.12;
+        tb.mesh.scale.setScalar(1 + k);
+      } else {
+        tb.mesh.scale.setScalar(1);
       }
     }
   }
@@ -734,7 +871,7 @@ export class World3D {
 
   render(time: number) {
     this.clock = time;
-    const pulse = 1 + Math.sin(time * 4.5) * 0.08;
+    const pulse = 1 + Math.sin(time * Math.PI * 2 * 1.2) * 0.1;
     this.focusRing.scale.setScalar(pulse);
     this.renderer.render(this.scene, this.camera);
   }
