@@ -1,4 +1,4 @@
-/** RU / EN strings for Бургерная */
+/** RU / EN — UX_BP_CANON keys + v1/v2 feel strings */
 const STRINGS: Record<string, Record<string, string>> = {
   ru: {
     loading: 'Загрузка…',
@@ -13,9 +13,10 @@ const STRINGS: Record<string, Record<string, string>> = {
     hintServe: 'Отнеси бургеры на зелёную СТОЙКУ',
     hintWait: 'Клиент ест у стола. Потом убери грязную посуду',
     hintClean: 'Подойди к грязному столу и убери тарелки',
-    hintUpgrade: 'Открой магазин 🛒 и улучши ресторан',
-    hintIdle: 'Готовь → собирай → подавай → убирай',
+    hintUpgrade: 'Зайди в зал прокачки или HR',
+    hintIdle: 'Готовь → собирай → подавай → убирай → строй',
     hintNeedType: 'Нужен заказ: {type} — собери на СБОРКЕ',
+    hintPad: 'Встань на золотой пад, чтобы купить',
     buy: 'Купить',
     owned: 'Куплено',
     max: 'Макс.',
@@ -33,11 +34,11 @@ const STRINGS: Record<string, Record<string, string>> = {
     waiterDesc: 'Сам относит бургеры на стойку',
     cleaner: 'Уборщик',
     cleanerDesc: 'Сам убирает грязные столы',
-    unlockCheese: 'Сыр в меню',
+    unlockCheese: 'Чиз в меню!',
+    unlockDouble: 'Дабл в меню!',
     unlockCheeseDesc: 'Открывает заказ Чиз',
-    unlockDouble: 'Дабл-меню',
     unlockDoubleDesc: 'Открывает заказ Дабл',
-    menuClassic: 'Классика',
+    menuClassic: 'Бургер',
     menuCheese: 'Чиз',
     menuDouble: 'Дабл',
     toastCheese: 'Новый заказ: Чиз! 🧀🍔',
@@ -58,6 +59,51 @@ const STRINGS: Record<string, Record<string, string>> = {
     approachCloser: 'подойди ближе',
     goHere: 'иди сюда',
     zoneClean: 'УБОРКА',
+    hudRestLv: 'Ур. {n}',
+    hudXp: 'XP {into}/{need}',
+    levelUpToast: 'Ресторан ур. {n}!',
+    padCost: '${cost}',
+    padLockedLv: 'Ур. {n}',
+    padNeedMore: 'Ещё ${n}',
+    pad_table_1: 'Стол 1',
+    pad_grill_1: 'Гриль',
+    pad_counter_1: 'Касса',
+    pad_table_2: 'Стол 2',
+    pad_expand_hr: 'Крыло HR',
+    pad_expand_player: 'Зал прокачки',
+    pad_table_3: 'Стол 3',
+    pad_expand_street: 'Двор',
+    pad_drive_thru: 'Драйв-thru',
+    pad_grill_2: 'Гриль 2',
+    pad_table_4: 'Стол 4',
+    pad_expand_storage: 'Склад',
+    pad_expand_restroom: 'Туалет',
+    pad_table_5: 'Стол 5',
+    pad_cashier_desk: 'Авто-касса',
+    pad_open_wing_b: 'Второе крыло',
+    hire_cleaner: 'Уборщик $180',
+    hire_waiter: 'Официант $220',
+    hire_cook: 'Повар $260',
+    hire_cashier: 'Кассир $300',
+    up_move: 'Скорость',
+    up_carry: 'Вместимость',
+    up_revenue: 'Выручка',
+    missionTitle: 'Миссия',
+    missionServe5: 'Подай 5 заказов',
+    missionClean3: 'Убери 3 стола',
+    missionEarn100: 'Заработай $100',
+    missionBuild3: 'Купи 3 постройки',
+    missionServe15: 'Подай 15 заказов',
+    missionHire1: 'Найми сотрудника',
+    missionClean10: 'Убери 10 столов',
+    missionEarn300: 'Заработай $300',
+    missionDone: 'Миссия! +${cash}',
+    offlineTitle: 'Пока тебя не было',
+    offlineBody: 'Офлайн: ${cash}',
+    offlineClaim: 'Забрать',
+    offlineX2: 'x2 за рекламу',
+    zoneHr: 'HR',
+    zonePlayerUp: 'ПРОКАЧКА',
   },
   en: {
     loading: 'Loading…',
@@ -72,9 +118,10 @@ const STRINGS: Record<string, Record<string, string>> = {
     hintServe: 'Deliver burgers to the green COUNTER',
     hintWait: 'The customer is eating. Then clear the dirty table',
     hintClean: 'Walk to the dirty table and clear the plates',
-    hintUpgrade: 'Open the 🛒 shop and upgrade',
-    hintIdle: 'Cook → assemble → serve → clean',
+    hintUpgrade: 'Visit the upgrade room or HR',
+    hintIdle: 'Cook → assemble → serve → clean → build',
     hintNeedType: 'Need {type} — assemble it at PREP',
+    hintPad: 'Stand on the gold pad to buy',
     buy: 'Buy',
     owned: 'Owned',
     max: 'Max',
@@ -92,11 +139,11 @@ const STRINGS: Record<string, Record<string, string>> = {
     waiterDesc: 'Auto-delivers burgers to counter',
     cleaner: 'Cleaner',
     cleanerDesc: 'Auto-clears dirty tables',
-    unlockCheese: 'Cheese menu',
+    unlockCheese: 'Cheese unlocked!',
+    unlockDouble: 'Double unlocked!',
     unlockCheeseDesc: 'Unlocks Cheese orders',
-    unlockDouble: 'Double menu',
     unlockDoubleDesc: 'Unlocks Double orders',
-    menuClassic: 'Classic',
+    menuClassic: 'Burger',
     menuCheese: 'Cheese',
     menuDouble: 'Double',
     toastCheese: 'New order: Cheese! 🧀🍔',
@@ -117,6 +164,51 @@ const STRINGS: Record<string, Record<string, string>> = {
     approachCloser: 'come closer',
     goHere: 'come here',
     zoneClean: 'CLEAN',
+    hudRestLv: 'Lv {n}',
+    hudXp: 'XP {into}/{need}',
+    levelUpToast: 'Restaurant Lv {n}!',
+    padCost: '${cost}',
+    padLockedLv: 'Lv {n}',
+    padNeedMore: 'Need ${n}',
+    pad_table_1: 'Table 1',
+    pad_grill_1: 'Grill',
+    pad_counter_1: 'Counter',
+    pad_table_2: 'Table 2',
+    pad_expand_hr: 'HR wing',
+    pad_expand_player: 'Upgrade room',
+    pad_table_3: 'Table 3',
+    pad_expand_street: 'Yard',
+    pad_drive_thru: 'Drive-thru',
+    pad_grill_2: 'Grill 2',
+    pad_table_4: 'Table 4',
+    pad_expand_storage: 'Storage',
+    pad_expand_restroom: 'Restroom',
+    pad_table_5: 'Table 5',
+    pad_cashier_desk: 'Auto till',
+    pad_open_wing_b: 'Wing B',
+    hire_cleaner: 'Cleaner $180',
+    hire_waiter: 'Waiter $220',
+    hire_cook: 'Cook $260',
+    hire_cashier: 'Cashier $300',
+    up_move: 'Move speed',
+    up_carry: 'Carry',
+    up_revenue: 'Revenue',
+    missionTitle: 'Mission',
+    missionServe5: 'Serve 5 orders',
+    missionClean3: 'Clean 3 tables',
+    missionEarn100: 'Earn $100',
+    missionBuild3: 'Buy 3 builds',
+    missionServe15: 'Serve 15 orders',
+    missionHire1: 'Hire a worker',
+    missionClean10: 'Clean 10 tables',
+    missionEarn300: 'Earn $300',
+    missionDone: 'Mission! +${cash}',
+    offlineTitle: 'While you were away',
+    offlineBody: 'Offline: ${cash}',
+    offlineClaim: 'Claim',
+    offlineX2: 'x2 with ad',
+    zoneHr: 'HR',
+    zonePlayerUp: 'UPGRADES',
   },
 };
 
@@ -135,6 +227,12 @@ export function t(key: string) {
   return (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.ru[key] || key;
 }
 
+export function tf(key: string, vars: Record<string, string | number>) {
+  let s = t(key);
+  for (const [k, v] of Object.entries(vars)) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), String(v));
+  return s;
+}
+
 export function applyStaticUI() {
   const shopTitle = document.getElementById('shopTitle');
   const btnClose = document.getElementById('btnCloseShop');
@@ -148,4 +246,10 @@ export function applyStaticUI() {
   if (pauseHint) pauseHint.textContent = t('pauseHint');
   if (loadText) loadText.textContent = t('loading');
   if (btnLang) btnLang.textContent = lang.toUpperCase();
+  const ot = document.getElementById('offlineTitle');
+  const oc = document.getElementById('offlineClaim');
+  const ox = document.getElementById('offlineX2');
+  if (ot) ot.textContent = t('offlineTitle');
+  if (oc) oc.textContent = t('offlineClaim');
+  if (ox) ox.textContent = t('offlineX2');
 }

@@ -22,6 +22,15 @@
         <div class="cash-wrap">
           <div class="cash" id="cashDisplay">💰 0</div>
           <div class="carry" id="carryDisplay">🍖 0 · 🍔 0</div>
+          <div id="restLevelHud" class="rest-level">
+            <div class="rl-top"><span id="restLvLabel">Lv 1</span><span id="restXpLabel">XP 0/40</span></div>
+            <div class="rl-bar"><i id="restXpBar"></i></div>
+          </div>
+          <div id="missionHud" class="mission-hud">
+            <div class="mh-title" id="missionTitle">Mission</div>
+            <div class="mh-body" id="missionBody">—</div>
+            <div class="mh-bar"><i id="missionBar"></i></div>
+          </div>
           <div id="menuStrip" class="menu-strip"></div>
         </div>
         <div class="hud-actions">
@@ -57,6 +66,31 @@
       <div class="panel">
         <h2 id="pauseTitle">Пауза</h2>
         <p id="pauseHint">Игра на паузе</p>
+      </div>
+    </div>
+
+    <div id="offlineModal" class="modal hidden">
+      <div class="panel">
+        <h2 id="offlineTitle">Пока тебя не было</h2>
+        <p id="offlineBody"></p>
+        <button type="button" id="offlineClaim" class="btn wide">Забрать</button>
+        <button type="button" id="offlineX2" class="btn wide reward" style="margin-top:8px">x2 за рекламу</button>
+      </div>
+    </div>
+
+    <div id="hrModal" class="modal hidden">
+      <div class="panel">
+        <h2 id="hrTitle">HR</h2>
+        <div id="hrList"></div>
+        <button type="button" id="btnCloseHr" class="btn wide">Закрыть</button>
+      </div>
+    </div>
+
+    <div id="playerUpModal" class="modal hidden">
+      <div class="panel">
+        <h2 id="playerUpTitle">Прокачка</h2>
+        <div id="playerUpList"></div>
+        <button type="button" id="btnClosePlayerUp" class="btn wide">Закрыть</button>
       </div>
     </div>
   </div>

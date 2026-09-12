@@ -70,13 +70,22 @@ export class World3D {
 
   private clock = 0;
   private _resizeObs?: ResizeObserver;
+  buildPadRoot!: THREE.Group;
+  buildPadMeshes = new Map<string, THREE.Group>();
+  zoneBarriers: Record<string, THREE.Group> = {};
+  streetFloor!: THREE.Mesh;
+  hrFloor!: THREE.Mesh;
+  playerUpFloor!: THREE.Mesh;
+  streetSpawn = { x: 3, z: -8.5 };
+  floorCoins: { mesh: THREE.Mesh; x: number; z: number; value: number }[] = [];
+
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1008);
-    this.scene.fog = new THREE.Fog(0x1a1008, 22, 38);
+    this.scene.fog = new THREE.Fog(0x1a1008, 28, 52);
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
     // Isometric-ish: above-front
     this.camera.position.set(0, 16, 14);
     this.camera.lookAt(0, 0, 0);
@@ -123,11 +132,11 @@ export class World3D {
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     sun.shadow.camera.near = 2;
-    sun.shadow.camera.far = 40;
-    sun.shadow.camera.left = -14;
-    sun.shadow.camera.right = 14;
-    sun.shadow.camera.top = 14;
-    sun.shadow.camera.bottom = -14;
+    sun.shadow.camera.far = 55;
+    sun.shadow.camera.left = -18;
+    sun.shadow.camera.right = 18;
+    sun.shadow.camera.top = 18;
+    sun.shadow.camera.bottom = -18;
     sun.shadow.bias = -0.001;
     this.scene.add(sun);
 
@@ -141,84 +150,128 @@ export class World3D {
   }
 
   buildRoom() {
-    // Floor kitchen / dining
-    const kitchen = box(9.5, 0.12, 12, 0xc4784a, -0.06);
-    kitchen.position.set(-4.75, 0, 0);
+    // ~24×16 connected floors: kitchen west, dining center, street north, wings
+    const kitchen = box(11, 0.12, 12, 0xc4784a, -0.06);
+    kitchen.position.set(-6.5, 0, 0);
     kitchen.receiveShadow = true;
     this.root.add(kitchen);
 
-    const dining = box(9.5, 0.12, 12, 0x7d5a38, -0.06);
-    dining.position.set(4.75, 0, 0);
+    const dining = box(12, 0.12, 12, 0x7d5a38, -0.06);
+    dining.position.set(5, 0, 0);
     dining.receiveShadow = true;
     this.root.add(dining);
 
-    // Checker accents via thin pads
-    const kitPad = box(8.6, 0.02, 11, 0xd4895a, 0.01);
-    kitPad.position.set(-4.5, 0, 0);
+    // Street / yard (north) — locked look until open
+    this.streetFloor = box(18, 0.12, 6.5, 0x4a4a52, -0.06);
+    this.streetFloor.position.set(0, 0, -7.2);
+    this.streetFloor.receiveShadow = true;
+    this.root.add(this.streetFloor);
+
+    // HR / Player wing floors
+    this.hrFloor = box(5, 0.12, 4.5, 0x5a6a8a, -0.06);
+    this.hrFloor.position.set(-8.5, 0, -7.0);
+    this.root.add(this.hrFloor);
+    this.playerUpFloor = box(5, 0.12, 4.5, 0x6a5a8a, -0.06);
+    this.playerUpFloor.position.set(-4.0, 0, -7.0);
+    this.root.add(this.playerUpFloor);
+
+    const kitPad = box(9.5, 0.02, 10.5, 0xd4895a, 0.01);
+    kitPad.position.set(-6.2, 0, 0);
     kitPad.material = makeMat(0xd4895a);
     (kitPad.material as THREE.MeshStandardMaterial).transparent = true;
     (kitPad.material as THREE.MeshStandardMaterial).opacity = 0.25;
     this.root.add(kitPad);
 
-    // Zone color washes
     const grillZone = box(3.4, 0.03, 2.6, 0xe64a28, 0.02);
-    grillZone.position.set(-6, 0, -2.5);
+    grillZone.position.set(-7.2, 0, -1.6);
     (grillZone.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x661800);
     (grillZone.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.35;
     this.root.add(grillZone);
 
     const prepZone = box(3.4, 0.03, 2.2, 0xf1c40f, 0.02);
-    prepZone.position.set(-6, 0, 0.9);
+    prepZone.position.set(-7.2, 0, 1.4);
     (prepZone.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x665500);
     (prepZone.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.25;
     this.root.add(prepZone);
 
     const counterZone = box(2.2, 0.03, 5.2, 0x27ae60, 0.02);
-    counterZone.position.set(-2.2, 0, 0.2);
+    counterZone.position.set(-2.0, 0, 0.4);
     (counterZone.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x0a4020);
     (counterZone.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3;
     this.root.add(counterZone);
 
-    const hallZone = box(8.5, 0.03, 9.5, 0x4a6fa5, 0.02);
-    hallZone.position.set(4.5, 0, 0.2);
+    const hallZone = box(10, 0.03, 9.5, 0x4a6fa5, 0.02);
+    hallZone.position.set(5, 0, 0.5);
     (hallZone.material as THREE.MeshStandardMaterial).transparent = true;
     (hallZone.material as THREE.MeshStandardMaterial).opacity = 0.35;
     this.root.add(hallZone);
 
-    // Walls
+    // Outer walls with arch gaps (visual)
     const wallMat = 0x4a2c1a;
-    const back = box(19.2, 2.4, 0.35, wallMat, 0);
-    back.position.set(0, 0, -6.1);
-    this.root.add(back);
-    const left = box(0.35, 2.4, 12.4, wallMat, 0);
-    left.position.set(-9.6, 0, 0);
+    const backL = box(8, 2.4, 0.35, wallMat, 0);
+    backL.position.set(-8, 0, -10.1);
+    this.root.add(backL);
+    const backR = box(8, 2.4, 0.35, wallMat, 0);
+    backR.position.set(8, 0, -10.1);
+    this.root.add(backR);
+    const left = box(0.35, 2.4, 16.5, wallMat, 0);
+    left.position.set(-12.1, 0, -2);
     this.root.add(left);
-    const right = box(0.35, 2.4, 12.4, wallMat, 0);
-    right.position.set(9.6, 0, 0);
+    const right = box(0.35, 2.4, 16.5, wallMat, 0);
+    right.position.set(12.1, 0, -2);
     this.root.add(right);
+    const front = box(24.5, 2.4, 0.35, wallMat, 0);
+    front.position.set(0, 0, 6.15);
+    this.root.add(front);
 
-    // Divider strip
-    const div = box(0.18, 0.08, 11.5, 0xffd278, 0.04);
-    div.position.set(-0.1, 0, 0);
-    this.root.add(div);
+    // Arch carpet kitchen↔dining
+    const carpet = box(1.2, 0.04, 4.5, 0xc0392b, 0.05);
+    carpet.position.set(-1.0, 0, 0.2);
+    this.root.add(carpet);
+    // Path to street
+    const path = box(3.5, 0.04, 1.2, 0xd4a017, 0.05);
+    path.position.set(2.5, 0, -4.2);
+    this.root.add(path);
 
-    // Menu board
-    const board = box(1.1, 1.4, 0.12, 0x2b1d12, 0.9);
-    board.position.set(-8.6, 0, -4.8);
-    this.root.add(board);
+    // Zone barriers (hidden when unlocked)
+    this.zoneBarriers = {};
+    const mkBar = (id: string, x: number, z: number, w: number, d: number) => {
+      const g = new THREE.Group();
+      const b = box(w, 1.6, d, 0x2a1a10, 0);
+      (b.material as THREE.MeshStandardMaterial).transparent = true;
+      (b.material as THREE.MeshStandardMaterial).opacity = 0.85;
+      g.add(b);
+      const lock = this.makeTextSprite('🔒', { fontSize: 48, color: '#fff' });
+      lock.position.set(0, 1.2, 0);
+      lock.scale.set(1.2, 1.2, 1);
+      g.add(lock);
+      g.position.set(x, 0, z);
+      this.root.add(g);
+      this.zoneBarriers[id] = g;
+    };
+    mkBar('hr', -8.5, -5.2, 4.5, 0.35);
+    mkBar('playerUp', -4.0, -5.2, 4.5, 0.35);
+    mkBar('street', 3.0, -4.5, 6, 0.35);
+    mkBar('storage', -10.5, -1.5, 0.35, 3);
+    mkBar('restroom', 0.5, -5.2, 3, 0.35);
+    mkBar('driveThru', 9.5, -4.0, 0.35, 4);
+    mkBar('wingB', 10.8, 1.5, 0.35, 5);
 
-    // Plants
-    this.addPlant(8.5, -4.8);
-    this.addPlant(-0.8, 5.2);
+    this.addPlant(10.5, -3.5);
+    this.addPlant(-0.5, 5.0);
 
     this.titleSprite = this.makeTextSprite(getLang() === 'en' ? '🍔 Burger Rush' : '🍔 Бургерная', {
       fontSize: 48,
       color: '#ffd36a',
     });
-    this.titleSprite.position.set(0, 3.2, -5.6);
+    this.titleSprite.position.set(0, 3.2, 5.4);
     this.titleSprite.scale.set(6, 1.5, 1);
     this.root.add(this.titleSprite);
+
+    this.buildPadRoot = new THREE.Group();
+    this.root.add(this.buildPadRoot);
   }
+
 
   addPlant(x: number, z: number) {
     const pot = cyl(0.22, 0.28, 0x5d3a1a, 0, 8);
@@ -233,7 +286,7 @@ export class World3D {
   buildStations() {
     // Grill
     this.grillGroup = new THREE.Group();
-    this.grillGroup.position.set(-6, 0, -2.5);
+    this.grillGroup.position.set(-7.2, 0, -1.6);
     const grillBody = box(2.4, 0.7, 1.6, 0x2a2a2a, 0);
     const grillTop = box(2.2, 0.08, 1.4, 0x444444, 0.7);
     this.grillGroup.add(grillBody, grillTop);
@@ -274,7 +327,7 @@ export class World3D {
 
     // Prep
     this.prepGroup = new THREE.Group();
-    this.prepGroup.position.set(-6, 0, 0.9);
+    this.prepGroup.position.set(-7.2, 0, 1.4);
     const prepBody = box(2.4, 0.65, 1.4, 0xf4d03f, 0);
     const board = box(2.0, 0.06, 1.1, 0xe8c27a, 0.65);
     this.prepGroup.add(prepBody, board);
@@ -290,7 +343,7 @@ export class World3D {
 
     // Counter
     this.counterGroup = new THREE.Group();
-    this.counterGroup.position.set(-2.2, 0, 0.2);
+    this.counterGroup.position.set(-2.0, 0, 0.4);
     const counterBody = box(1.2, 1.0, 4.4, 0x27ae60, 0);
     const counterTop = box(1.3, 0.1, 4.5, 0x1e8449, 1.0);
     this.counterGroup.add(counterBody, counterTop);
@@ -304,7 +357,7 @@ export class World3D {
 
     // Trash
     this.trashGroup = new THREE.Group();
-    this.trashGroup.position.set(-7.2, 0, 4.2);
+    this.trashGroup.position.set(-9.5, 0, 3.8);
     const trash = box(1.0, 1.0, 1.0, 0x3a3a3a, 0);
     const stripe = box(1.02, 0.15, 1.02, 0xf1c40f, 0.85);
     this.trashGroup.add(trash, stripe);
@@ -316,9 +369,8 @@ export class World3D {
 
     // Tables
     const positions = [
-      [2.2, -3.2], [4.6, -3.2], [7.0, -3.2],
-      [2.2, -0.6], [4.6, -0.6], [7.0, -0.6],
-      [3.4, 2.2], [5.8, 2.2],
+      [2.2, 1.4], [4.8, 1.4], [7.4, 1.4],
+      [2.2, 3.8], [4.8, 3.8],
     ];
     positions.forEach(([x, z], i) => {
       const mesh = new THREE.Group();
@@ -364,11 +416,12 @@ export class World3D {
     this.root.add(hallLbl);
 
     this.queueSpots = [
-      { x: -0.6, z: -1.4 },
-      { x: -0.6, z: -0.2 },
-      { x: -0.6, z: 1.0 },
-      { x: -0.6, z: 2.2 },
+      { x: -0.4, z: -1.2 },
+      { x: -0.4, z: 0.0 },
+      { x: -0.4, z: 1.2 },
+      { x: -0.4, z: 2.4 },
     ];
+    this.streetSpawn = { x: 3.0, z: -8.5 };
   }
 
   buildFocusAndTutorial() {
@@ -413,10 +466,10 @@ export class World3D {
     // Floor top is ~y=0.06 — pads MUST sit above it or they are invisible (z-fight / inside mesh)
     type Pad = { x: number; z: number; color: number; r?: number; kind: string };
     const pads: Pad[] = [
-      { x: -6, z: -1.1, color: 0xff6b35, kind: 'grill' },
-      { x: -6, z: 2.1, color: 0xf1c40f, kind: 'prep' },
-      { x: -0.7, z: 0.2, color: 0x2ecc71, kind: 'counter' },
-      { x: -7.2, z: 3.1, color: 0xf1c40f, r: 0.9, kind: 'trash' },
+      { x: -7.2, z: -0.3, color: 0xff6b35, kind: 'grill' },
+      { x: -7.2, z: 2.5, color: 0xf1c40f, kind: 'prep' },
+      { x: -0.5, z: 0.4, color: 0x2ecc71, kind: 'counter' },
+      { x: -9.5, z: 2.8, color: 0xf1c40f, r: 0.9, kind: 'trash' },
     ];
     this.tables.forEach((tb, i) => {
       pads.push({ x: tb.x, z: tb.z - 1.05, color: 0x5dade2, r: 1.15, kind: `table-${i}` });
@@ -526,9 +579,13 @@ export class World3D {
     tb.cleanPunchT = 0.28;
   }
 
+  mapBounds = { minX: -11.5, maxX: 11.5, minZ: -9.5, maxZ: 5.5 };
+
   followCamera(px: number, pz: number, dt: number) {
-    const desiredPos = new THREE.Vector3(px * 0.35 + 0.5, 15.2, pz * 0.25 + 12.2);
-    const desiredLook = new THREE.Vector3(px * 0.55, 0.5, pz * 0.55 + 0.3);
+    const bx = Math.max(this.mapBounds.minX + 2, Math.min(this.mapBounds.maxX - 2, px));
+    const bz = Math.max(this.mapBounds.minZ + 2, Math.min(this.mapBounds.maxZ - 2, pz));
+    const desiredPos = new THREE.Vector3(bx * 0.32 + 0.4, 16.2, bz * 0.22 + 13.5);
+    const desiredLook = new THREE.Vector3(bx * 0.5, 0.5, bz * 0.5 + 0.2);
     const k = clamp01(1 - Math.exp(-5.5 * dt));
     this.camPos.lerp(desiredPos, k);
     this.camLook.lerp(desiredLook, k);
@@ -899,5 +956,89 @@ export class World3D {
 
   dispose() {
     this.renderer.dispose();
+  }
+
+  setZoneOpen(id: string, open: boolean) {
+    const b = this.zoneBarriers[id];
+    if (b) b.visible = !open;
+  }
+
+  setStationBuilt(kind: 'grill' | 'prep' | 'counter' | 'trash', built: boolean) {
+    const g = kind === 'grill' ? this.grillGroup
+      : kind === 'prep' ? this.prepGroup
+      : kind === 'counter' ? this.counterGroup
+      : this.trashGroup;
+    if (g) g.visible = built;
+  }
+
+  syncBuildPads(
+    pads: { id: string; x: number; z: number; label: string; cost: number; paid: number; locked: boolean; lockLv?: number; visible: boolean }[],
+  ) {
+    const seen = new Set<string>();
+    for (const p of pads) {
+      seen.add(p.id);
+      let g = this.buildPadMeshes.get(p.id);
+      if (!g) {
+        g = new THREE.Group();
+        g.position.set(p.x, 0, p.z);
+        const disc = new THREE.Mesh(
+          new THREE.CircleGeometry(0.95, 32),
+          new THREE.MeshBasicMaterial({ color: 0xf1c40f, transparent: true, opacity: 0.55, depthWrite: false }),
+        );
+        disc.rotation.x = -Math.PI / 2;
+        disc.position.y = 0.14;
+        disc.renderOrder = 18;
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.95, 1.15, 32),
+          new THREE.MeshBasicMaterial({ color: 0xffe566, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.15;
+        ring.renderOrder = 19;
+        const label = this.makeTextSprite(p.label, { fontSize: 36, color: '#fff8d0' });
+        label.position.set(0, 1.15, 0);
+        label.scale.set(2.4, 0.55, 1);
+        g.add(disc, ring, label);
+        g.userData.disc = disc;
+        g.userData.ring = ring;
+        g.userData.label = label;
+        this.buildPadRoot.add(g);
+        this.buildPadMeshes.set(p.id, g);
+      }
+      g.visible = p.visible;
+      const costTxt = p.locked
+        ? `🔒 ${p.lockLv != null ? 'Lv' + p.lockLv : ''}`
+        : (p.cost <= 0 ? 'FREE' : (p.paid > 0 && p.paid < p.cost ? `$${p.paid}/$${p.cost}` : `$${p.cost}`));
+      this.updateSpriteText(g.userData.label, `${p.label}\n${costTxt}`);
+      const mat = (g.userData.disc as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      mat.color.setHex(p.locked ? 0x666666 : (p.paid > 0 ? 0x2ecc71 : 0xf1c40f));
+    }
+    for (const [id, g] of this.buildPadMeshes) {
+      if (!seen.has(id)) { g.visible = false; }
+    }
+  }
+
+  spawnFloorCoin(x: number, z: number, value: number) {
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.22, 0.08, 16),
+      new THREE.MeshStandardMaterial({ color: 0xf1c40f, emissive: 0xaa7700, emissiveIntensity: 0.4 }),
+    );
+    m.position.set(x, 0.2, z);
+    this.root.add(m);
+    this.floorCoins.push({ mesh: m, x, z, value });
+  }
+
+  collectFloorCoinsNear(px: number, pz: number, r = 1.1): number {
+    let sum = 0;
+    for (let i = this.floorCoins.length - 1; i >= 0; i--) {
+      const c = this.floorCoins[i];
+      if (Math.hypot(c.x - px, c.z - pz) < r) {
+        sum += c.value;
+        this.root.remove(c.mesh);
+        c.mesh.geometry.dispose();
+        this.floorCoins.splice(i, 1);
+      }
+    }
+    return sum;
   }
 }

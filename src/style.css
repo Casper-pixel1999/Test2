@@ -445,3 +445,29 @@ html, body {
     bottom: max(10px, env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* BP HUD */
+.rest-level {
+  background: rgba(20,10,6,.7);
+  border: 1px solid rgba(255,200,80,.35);
+  border-radius: 14px;
+  padding: 6px 10px;
+  min-width: 160px;
+  backdrop-filter: blur(4px);
+}
+.rl-top { display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:.85rem; color:#ffd36a; }
+.rl-bar, .mh-bar { height:8px; border-radius:6px; background:#3a2414; overflow:hidden; margin-top:4px; }
+.rl-bar > i, .mh-bar > i {
+  display:block; height:100%; width:0%;
+  background: linear-gradient(90deg, #f5a623, #ff6b35);
+  transition: width .2s;
+}
+.mission-hud {
+  background: rgba(20,10,6,.62);
+  border: 1px solid rgba(120,200,255,.3);
+  border-radius: 14px;
+  padding: 6px 10px;
+  min-width: 160px;
+}
+.mh-title { font-size:.72rem; opacity:.8; text-transform:uppercase; letter-spacing:.04em; }
+.mh-body { font-weight:700; font-size:.88rem; margin-top:2px; }

@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { t, tf } from '../i18n';
 import { gameplayStart, gameplayStop, cloudSave, cloudLoad, showRewarded, showFullscreen } from '../yandex';
 import { World3D } from './World3D';
 import { sfx } from './audio';
@@ -8,8 +8,13 @@ import {
   cheeseUnlocked, doubleUnlocked, burgersToStack,
   takeBurger, takeAnyBurgerFifo, addBurger,
 } from './menu';
+import {
+  BUILD_PADS, MISSIONS, START_CASH, HR_HIRE, MAP,
+  levelFromXp, xpProgress, unlocksForLevel,
+  playerUpCost, playerUpXp, PAY,
+} from './progress';
+import { MetaSave, loadLocal, saveLocal as persistSave, migrateSave } from './save';
 
-const SAVE_KEY = 'burger_rush_save_v1';
 const SKINS = ['#f1c27d', '#ffdeb4', '#e0ac69', '#c68642', '#8d5524'];
 
 function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
@@ -73,7 +78,7 @@ export class Game {
   joy = { x: 0, y: 0, active: false };
   shopOpen = false;
 
-  state = this.defaultState();
+  // state set in constructor (MetaSave)
   layout!: {
     grill: { x: number; z: number; r: number; slots: GrillSlot[]; interact: InteractPad; solid: StationSolid };
     prep: Prep & { x: number; z: number; r: number; interact: InteractPad; solid: StationSolid };
@@ -105,58 +110,71 @@ export class Game {
   _toastCheese = false;
   _toastDouble = false;
   _mismatchHint = false;
+  _hrNear = 0;
+  _pupNear = 0;
+  _hrOpen = false;
+  _pupOpen = false;
+  _offlineCash = 0;
+  state!: MetaSave;
 
   constructor(canvas: HTMLCanvasElement) {
     this.world = new World3D(canvas);
+    this.state = this.defaultState();
     this.buildLayout();
     this.bindInput();
   }
 
-  defaultState() {
+  defaultState(): MetaSave {
     return {
-      cash: 0,
-      speedLv: 0,
-      capLv: 0,
-      profitLv: 0,
-      grillLv: 0,
-      tablesUnlocked: 1,
-      hasWaiter: false,
-      hasCleaner: false,
-      hasCheese: false,
-      hasDoubleMenu: false,
+      version: 3,
+      cash: START_CASH,
+      restaurantXP: 0,
+      builtPads: [],
+      padPaid: {},
+      openZones: ['kitchen', 'dining'],
+      speedLv: 0, capLv: 0, profitLv: 0, grillLv: 0,
+      tablesUnlocked: 0,
+      hasWaiter: false, hasCleaner: false, hasCook: false, hasCashier: false,
+      hasCheese: false, hasDoubleMenu: false,
       tutorialDone: false,
-      totalServed: 0,
-      seenCheeseToast: false,
-      seenDoubleToast: false,
+      totalServed: 0, totalCleaned: 0, sessionEarned: 0,
+      buildsBought: 0, hiresBought: 0,
+      missionIndex: 0, missionProgress: 0,
+      seenCheeseToast: false, seenDoubleToast: false,
+      lastSeenAt: Date.now(),
     };
   }
+
+  hasPad(id: string) { return this.state.builtPads.includes(id); }
+  restLevel() { return levelFromXp(this.state.restaurantXP); }
+  coreReady() { return this.hasPad('table_1') && this.hasPad('grill_1') && this.hasPad('counter_1'); }
 
   buildLayout() {
     this.layout = {
       grill: {
-        x: -6, z: -2.5, r: 1.6,
+        x: -7.2, z: -1.6, r: 1.6,
         slots: [
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
         ],
-        interact: { x: -6, z: -1.1, r: 1.35 },
-        solid: { x: -6, z: -2.5, hw: 1.35, hd: 0.95 },
+        interact: { x: -7.2, z: -0.3, r: 1.35 },
+        solid: { x: -7.2, z: -1.6, hw: 1.35, hd: 0.95 },
       },
       prep: {
-        x: -6, z: 0.9, r: 1.5, patties: 0, burgers: emptyBurgers(), craft: null,
-        interact: { x: -6, z: 2.1, r: 1.25 },
-        solid: { x: -6, z: 0.9, hw: 1.2, hd: 0.85 },
+        x: -7.2, z: 1.4, r: 1.5, patties: 0, burgers: emptyBurgers(), craft: null,
+        interact: { x: -7.2, z: 2.5, r: 1.25 },
+        solid: { x: -7.2, z: 1.4, hw: 1.2, hd: 0.85 },
       },
       counter: {
-        x: -2.2, z: 0.2, r: 1.8, burgers: emptyBurgers(),
-        interact: { x: -0.7, z: 0.2, r: 1.35 },
-        solid: { x: -2.2, z: 0.2, hw: 1.5, hd: 0.7 },
+        x: -2.0, z: 0.4, r: 1.8, burgers: emptyBurgers(),
+        interact: { x: -0.5, z: 0.4, r: 1.35 },
+        solid: { x: -2.0, z: 0.4, hw: 1.5, hd: 0.7 },
       },
       trash: {
-        x: -7.2, z: 4.2, r: 1.2,
-        interact: { x: -7.2, z: 3.2, r: 1.1 },
-        solid: { x: -7.2, z: 4.2, hw: 0.7, hd: 0.7 },
+        x: -9.5, z: 3.8, r: 1.2,
+        interact: { x: -9.5, z: 2.8, r: 1.1 },
+        solid: { x: -9.5, z: 3.8, hw: 0.7, hd: 0.7 },
       },
     };
     this.solids = [
@@ -164,11 +182,6 @@ export class Game {
       this.layout.prep.solid,
       this.layout.counter.solid,
       this.layout.trash.solid,
-      { x: 1.2, z: 2.6, hw: 0.85, hd: 0.85 },
-      { x: 3.6, z: 2.6, hw: 0.85, hd: 0.85 },
-      { x: 6.0, z: 2.6, hw: 0.85, hd: 0.85 },
-      { x: 1.2, z: 4.6, hw: 0.85, hd: 0.85 },
-      { x: 3.6, z: 4.6, hw: 0.85, hd: 0.85 },
     ];
   }
 
@@ -195,7 +208,7 @@ export class Game {
     return 1;
   }
   payForCustomer(c: Customer) {
-    let base = menuItem(c.order).pay;
+    let base = PAY[c.order] ?? menuItem(c.order).pay;
     if (c.order === 'classic' && this.state.totalServed < 3) base = 15;
     let tm = 1;
     if (c.trait === 'vip') tm = 1.25;
@@ -209,28 +222,23 @@ export class Game {
     else if (trait === 'vip') p *= 1.15;
     return p;
   }
-  cheeseOk() { return cheeseUnlocked(this.state.totalServed, this.state.hasCheese); }
-  doubleOk() { return doubleUnlocked(this.state.totalServed, this.state.hasDoubleMenu); }
+  cheeseOk() {
+    const u = unlocksForLevel(this.restLevel());
+    return this.state.hasCheese || u.cheese || cheeseUnlocked(this.state.totalServed, this.state.hasCheese);
+  }
+  doubleOk() {
+    const u = unlocksForLevel(this.restLevel());
+    return this.state.hasDoubleMenu || u.doubleMenu || doubleUnlocked(this.state.totalServed, this.state.hasDoubleMenu);
+  }
 
   load() {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw);
-        Object.assign(this.state, data);
-        // migrate flags
-        if (data.hasCheese == null && this.state.totalServed >= 5) this.state.hasCheese = true;
-        if (data.hasDoubleMenu == null && this.state.totalServed >= 12) this.state.hasDoubleMenu = true;
-      }
-    } catch (_) {}
+    this.state = loadLocal();
     this.applyUnlocks();
     if (this.state.tutorialDone) this.tutorialStep = 5;
   }
 
   applyUnlocks() {
-    this.world.tables.forEach((tb, i) => {
-      tb.unlocked = i < this.state.tablesUnlocked;
-    });
+    this.applyBuilds();
     this.workers = [];
     if (this.state.hasWaiter) {
       this.workers.push({
@@ -246,28 +254,312 @@ export class Game {
     this.world.syncWorkers(this.workers);
   }
 
+  applyBuilds() {
+    const built = new Set(this.state.builtPads);
+    const hasGrill = built.has('grill_1') || built.has('grill_2');
+    const hasCounter = built.has('counter_1');
+    this.world.setStationBuilt('grill', hasGrill);
+    this.world.setStationBuilt('prep', hasGrill);
+    this.world.setStationBuilt('counter', hasCounter);
+    this.world.setStationBuilt('trash', hasCounter);
+
+    let tables = 0;
+    for (const pad of BUILD_PADS) {
+      if (pad.kind === 'table' && built.has(pad.id) && pad.tableIndex != null) {
+        tables = Math.max(tables, pad.tableIndex + 1);
+      }
+    }
+    this.state.tablesUnlocked = Math.max(this.state.tablesUnlocked, tables);
+    this.world.tables.forEach((tb, i) => {
+      tb.unlocked = i < this.state.tablesUnlocked;
+      // reposition to pad coords if defined
+      const pad = BUILD_PADS.find((x) => x.kind === 'table' && x.tableIndex === i);
+      if (pad) {
+        tb.x = pad.x; tb.z = pad.z;
+        tb.mesh.position.set(pad.x, 0, pad.z);
+      }
+      tb.mesh.visible = tb.unlocked;
+    });
+
+    const zones = new Set(this.state.openZones);
+    if (built.has('expand_hr')) zones.add('hr');
+    if (built.has('expand_player')) zones.add('playerUp');
+    if (built.has('expand_street')) zones.add('street');
+    if (built.has('drive_thru')) zones.add('driveThru');
+    if (built.has('expand_storage')) zones.add('storage');
+    if (built.has('expand_restroom')) zones.add('restroom');
+    if (built.has('open_wing_b')) zones.add('wingB');
+    this.state.openZones = [...zones];
+    this.world.setZoneOpen('hr', zones.has('hr'));
+    this.world.setZoneOpen('playerUp', zones.has('playerUp'));
+    this.world.setZoneOpen('street', zones.has('street'));
+    this.world.setZoneOpen('driveThru', zones.has('driveThru'));
+    this.world.setZoneOpen('storage', zones.has('storage'));
+    this.world.setZoneOpen('restroom', zones.has('restroom'));
+    this.world.setZoneOpen('wingB', zones.has('wingB'));
+  }
+
   saveLocal() {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); } catch (_) {}
+    persistSave(this.state);
   }
 
   async saveCloud() {
     await cloudSave({ ...this.state });
   }
 
+  addXP(n: number) {
+    const prev = this.restLevel();
+    this.state.restaurantXP += n;
+    const next = this.restLevel();
+    if (next > prev) {
+      this.showToast(tf('levelUpToast', { n: next }));
+      sfx.play('buy');
+      if (next >= 5 && !this.state.seenCheeseToast) {
+        this.state.hasCheese = true;
+        this.state.seenCheeseToast = true;
+        this.showToast(t('unlockCheese'));
+      }
+      if (next >= 7 && !this.state.seenDoubleToast) {
+        this.state.hasDoubleMenu = true;
+        this.state.seenDoubleToast = true;
+        this.showToast(t('unlockDouble'));
+      }
+    }
+  }
+
+  completePad(id: string) {
+    if (this.hasPad(id)) return;
+    const def = BUILD_PADS.find((p) => p.id === id);
+    if (!def) return;
+    this.state.builtPads.push(id);
+    this.state.buildsBought++;
+    this.state.padPaid[id] = def.cost;
+    this.addXP(def.xp);
+    this.bumpMission('build', 1);
+    this.applyBuilds();
+    sfx.play('buy');
+    this.showToast(`${t(def.labelKey)} ✓`);
+    if (id === 'expand_hr') this.showToast(t('pad_expand_hr'));
+    if (id === 'expand_player') this.showToast(t('pad_expand_player'));
+    if (id === 'table_1' && !this.state.tutorialDone) this.tutorialStep = Math.max(this.tutorialStep, 0);
+    if (id === 'grill_1') this.tutorialStep = Math.max(this.tutorialStep, 0);
+    this.saveLocal();
+  }
+
+  updateBuildPads(dt: number) {
+    const lv = this.restLevel();
+    const vis: { id: string; x: number; z: number; label: string; cost: number; paid: number; locked: boolean; lockLv?: number; visible: boolean }[] = [];
+    for (const def of BUILD_PADS) {
+      if (this.hasPad(def.id)) continue;
+      const reqOk = def.requires.every((r) => this.hasPad(r));
+      if (!reqOk) continue;
+      // show next pads only (gate by previous chain already via requires)
+      const locked = lv < def.minLevel;
+      const paid = this.state.padPaid[def.id] || 0;
+      vis.push({
+        id: def.id, x: def.x, z: def.z,
+        label: t(def.labelKey),
+        cost: def.cost, paid, locked, lockLv: def.minLevel,
+        visible: true,
+      });
+      // stand-to-pay
+      if (!locked && this.player && dist(this.player, def) < 1.15) {
+        if (def.cost <= 0) {
+          this.completePad(def.id);
+        } else {
+          const need = def.cost - paid;
+          if (need > 0 && this.state.cash > 0) {
+            const pay = Math.min(this.state.cash, Math.max(8, need) * Math.min(1, dt * 2.2));
+            // continuous drain while standing
+            const drain = Math.min(this.state.cash, need, Math.max(0.5, 28 * dt));
+            this.state.cash -= drain;
+            this.state.padPaid[def.id] = paid + drain;
+            if (this.state.padPaid[def.id] >= def.cost - 0.05) {
+              this.state.cash += this.state.padPaid[def.id] - def.cost; // tiny float fix
+              this.state.padPaid[def.id] = def.cost;
+              this.completePad(def.id);
+            }
+          }
+        }
+      }
+    }
+    this.world.syncBuildPads(vis);
+
+    // HR / Player room proximity open
+    if (this.state.openZones.includes('hr') && this.player && dist(this.player, { x: -8.5, z: -7.0 }) < 1.4) {
+      this._hrNear = (this._hrNear || 0) + dt;
+      if (this._hrNear > 0.35 && !this._hrOpen) this.openHr();
+    } else this._hrNear = 0;
+    if (this.state.openZones.includes('playerUp') && this.player && dist(this.player, { x: -4.0, z: -7.0 }) < 1.4) {
+      this._pupNear = (this._pupNear || 0) + dt;
+      if (this._pupNear > 0.35 && !this._pupOpen) this.openPlayerUp();
+    } else this._pupNear = 0;
+  }
+
+  bumpMission(kind: string, amount: number) {
+    const m = MISSIONS[this.state.missionIndex % MISSIONS.length];
+    if (!m || m.kind !== kind) {
+      if (kind === 'earn') {
+        // earn missions track sessionEarned separately via check
+      }
+      return;
+    }
+    this.state.missionProgress += amount;
+    if (this.state.missionProgress >= m.target) {
+      this.state.cash += m.reward;
+      this.addXP(m.xp);
+      this.showToast(tf('missionDone', { cash: m.reward }));
+      this.state.missionIndex++;
+      this.state.missionProgress = 0;
+      sfx.play('pay');
+    }
+  }
+
+  syncMissionEarn() {
+    const m = MISSIONS[this.state.missionIndex % MISSIONS.length];
+    if (m && m.kind === 'earn') {
+      this.state.missionProgress = Math.min(m.target, Math.floor(this.state.sessionEarned));
+      if (this.state.missionProgress >= m.target) {
+        this.state.cash += m.reward;
+        this.addXP(m.xp);
+        this.showToast(tf('missionDone', { cash: m.reward }));
+        this.state.missionIndex++;
+        this.state.missionProgress = 0;
+      }
+    }
+  }
+
+  openHr() {
+    if (this._hrOpen || this.shopOpen) return;
+    this._hrOpen = true;
+    gameplayStop();
+    const list = document.getElementById('hrList');
+    const modal = document.getElementById('hrModal');
+    if (!list || !modal) return;
+    list.innerHTML = '';
+    const lv = this.restLevel();
+    for (const [id, info] of Object.entries(HR_HIRE)) {
+      const owned = (id === 'hire_waiter' && this.state.hasWaiter)
+        || (id === 'hire_cleaner' && this.state.hasCleaner)
+        || (id === 'hire_cook' && this.state.hasCook)
+        || (id === 'hire_cashier' && this.state.hasCashier);
+      const row = document.createElement('div');
+      row.className = 'shop-item';
+      const locked = lv < info.minLevel;
+      const can = !owned && !locked && this.state.cash >= info.cost;
+      row.innerHTML = `<div class="info"><div class="name">${t(info.key)}</div>
+        <div class="desc">${locked ? tf('padLockedLv', { n: info.minLevel }) : '+15 XP'}</div></div>
+        <button type="button" ${(!can || owned) ? 'disabled' : ''}>${owned ? t('owned') : '$' + info.cost}</button>`;
+      row.querySelector('button')!.addEventListener('click', () => {
+        if (owned || locked || this.state.cash < info.cost) return;
+        this.state.cash -= info.cost;
+        if (id === 'hire_waiter') this.state.hasWaiter = true;
+        if (id === 'hire_cleaner') this.state.hasCleaner = true;
+        if (id === 'hire_cook') this.state.hasCook = true;
+        if (id === 'hire_cashier') this.state.hasCashier = true;
+        this.state.hiresBought++;
+        this.addXP(info.xp);
+        this.bumpMission('hire', 1);
+        this.applyUnlocks();
+        this.saveLocal();
+        this.openHr();
+        this.updateHUD();
+      });
+      list.appendChild(row);
+    }
+    modal.classList.remove('hidden');
+  }
+
+  closeHr() {
+    this._hrOpen = false;
+    document.getElementById('hrModal')?.classList.add('hidden');
+    if (!this.paused && !this.shopOpen) gameplayStart();
+  }
+
+  openPlayerUp() {
+    if (this._pupOpen || this.shopOpen) return;
+    this._pupOpen = true;
+    gameplayStop();
+    const list = document.getElementById('playerUpList');
+    const modal = document.getElementById('playerUpModal');
+    if (!list || !modal) return;
+    list.innerHTML = '';
+    const items: { key: string; lv: number; kind: 'move' | 'carry' | 'revenue'; buy: () => void }[] = [
+      { key: 'up_move', lv: this.state.speedLv, kind: 'move', buy: () => { this.state.speedLv++; } },
+      { key: 'up_carry', lv: this.state.capLv, kind: 'carry', buy: () => { this.state.capLv++; } },
+      { key: 'up_revenue', lv: this.state.profitLv, kind: 'revenue', buy: () => { this.state.profitLv++; } },
+    ];
+    for (const it of items) {
+      const maxed = it.lv >= 5;
+      const cost = playerUpCost(it.kind, it.lv);
+      const can = !maxed && this.state.cash >= cost;
+      const row = document.createElement('div');
+      row.className = 'shop-item';
+      row.innerHTML = `<div class="info"><div class="name">${t(it.key)} (${it.lv}/5)</div></div>
+        <button type="button" ${maxed || !can ? 'disabled' : ''}>${maxed ? t('max') : '$' + cost}</button>`;
+      row.querySelector('button')!.addEventListener('click', () => {
+        if (it.lv >= 5 || this.state.cash < cost) return;
+        this.state.cash -= cost;
+        it.buy();
+        this.addXP(playerUpXp(it.lv + 1));
+        sfx.play('buy');
+        this.saveLocal();
+        this.openPlayerUp();
+        this.updateHUD();
+      });
+      list.appendChild(row);
+    }
+    modal.classList.remove('hidden');
+  }
+
+  closePlayerUp() {
+    this._pupOpen = false;
+    document.getElementById('playerUpModal')?.classList.add('hidden');
+    if (!this.paused && !this.shopOpen) gameplayStart();
+  }
+
+  maybeOfflineEarn() {
+    const last = this.state.lastSeenAt || Date.now();
+    const awaySec = Math.min(8 * 3600, Math.max(0, (Date.now() - last) / 1000));
+    if (awaySec < 90 || !this.coreReady()) return;
+    const rate = 0.35 + this.restLevel() * 0.08 + (this.state.hasWaiter ? 0.15 : 0);
+    this._offlineCash = Math.floor(awaySec / 60 * rate * 4);
+    if (this._offlineCash < 5) return;
+    const modal = document.getElementById('offlineModal');
+    const body = document.getElementById('offlineBody');
+    if (body) body.textContent = tf('offlineBody', { cash: this._offlineCash });
+    modal?.classList.remove('hidden');
+    this.paused = true;
+    gameplayStop();
+  }
+
+  claimOffline(mult: number) {
+    const n = Math.floor((this._offlineCash || 0) * mult);
+    this.state.cash += n;
+    this.state.sessionEarned += n;
+    this._offlineCash = 0;
+    document.getElementById('offlineModal')?.classList.add('hidden');
+    this.paused = false;
+    gameplayStart();
+    this.updateHUD();
+    this.saveLocal();
+  }
+
   async start() {
     this.load();
     const cloud = await cloudLoad();
     if (cloud && typeof cloud === 'object') {
-      Object.assign(this.state, cloud);
+      this.state = migrateSave({ ...this.state, ...cloud, version: (cloud as any).version ?? this.state.version });
       this.applyUnlocks();
       if (this.state.tutorialDone) this.tutorialStep = 5;
     }
     this.player = {
-      x: -4.5, z: 0, vx: 0, vz: 0,
+      x: -4.5, z: 0.5, vx: 0, vz: 0,
       patties: 0, burgers: emptyBurgers(), dirty: 0, facing: 1, walk: 0,
     };
     this.world.createPlayer();
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, 0, false);
+    this.applyBuilds();
     this.running = true;
     this.paused = false;
     this.spawnTimer = this.isTraining() ? 1.0 : 2.5;
@@ -279,6 +571,20 @@ export class Game {
     this.refreshShop();
     this.syncMuteBtn();
     this.checkUnlockToasts();
+    this.bindBpUi();
+    this.maybeOfflineEarn();
+    if (!this.coreReady()) this.hintKey = 'hintPad';
+  }
+
+  bindBpUi() {
+    document.getElementById('btnCloseHr')?.addEventListener('click', () => this.closeHr());
+    document.getElementById('btnClosePlayerUp')?.addEventListener('click', () => this.closePlayerUp());
+    document.getElementById('offlineClaim')?.addEventListener('click', () => this.claimOffline(1));
+    document.getElementById('offlineX2')?.addEventListener('click', async () => {
+      this.setPaused(true);
+      const ok = await showRewarded();
+      this.claimOffline(ok ? 2 : 1);
+    });
   }
 
   setPaused(p: boolean) {
@@ -365,7 +671,7 @@ export class Game {
     if (!this.running) return;
     const dt = Math.min(0.05, (ts - this.lastTs) / 1000);
     this.lastTs = ts;
-    if (!this.paused && !this.shopOpen) {
+    if (!this.paused && !this.shopOpen && !this._hrOpen && !this._pupOpen) {
       this.dt = dt;
       this.time += dt;
       this.update(dt);
@@ -376,9 +682,18 @@ export class Game {
 
   update(dt: number) {
     this.updatePlayer(dt);
-    this.updateGrill(dt);
-    this.updatePrepCraft(dt);
-    this.updateCustomers(dt);
+    this.updateBuildPads(dt);
+    const got = this.world.collectFloorCoinsNear(this.player.x, this.player.z);
+    if (got > 0) {
+      this.state.cash += got;
+      this.state.sessionEarned += got;
+      this.syncMissionEarn();
+      this.float(`+$${got}`, this.player.x, this.player.z, '#f1c40f');
+      sfx.play('pay');
+    }
+    if (this.hasPad('grill_1')) this.updateGrill(dt);
+    if (this.hasPad('grill_1')) this.updatePrepCraft(dt);
+    if (this.coreReady()) this.updateCustomers(dt);
     this.updateWorkers(dt);
     this.updateTutorial();
     this.updateApproachPrompt();
@@ -434,8 +749,18 @@ export class Game {
     if (moving) this.player.walk += dt * (10 + Math.hypot(this.player.vx, this.player.vz));
     else this.player.walk *= 0.88;
 
-    this.player.x = clamp(this.player.x + this.player.vx * dt, -8.8, 8.8);
-    this.player.z = clamp(this.player.z + this.player.vz * dt, -5.2, 5.2);
+    let nx = this.player.x + this.player.vx * dt;
+    let nz = this.player.z + this.player.vz * dt;
+    // map bounds; block locked wings roughly
+    nx = clamp(nx, MAP.minX + 0.6, MAP.maxX - 0.6);
+    nz = clamp(nz, MAP.minZ + 0.6, MAP.maxZ - 0.6);
+    if (!this.state.openZones.includes('street') && !this.state.openZones.includes('hr') && !this.state.openZones.includes('playerUp')) {
+      nz = Math.max(nz, -4.6);
+    } else if (!this.state.openZones.includes('street') && nz < -5.0 && nx > -2 && nx < 8) {
+      nz = Math.max(nz, -4.6);
+    }
+    this.player.x = nx;
+    this.player.z = nz;
 
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, this.player.walk, moving);
     this.world.followCamera(this.player.x, this.player.z, dt);
@@ -510,8 +835,9 @@ export class Game {
     const g = this.layout.grill;
     const prep = this.layout.prep;
     const counter = this.layout.counter;
+    if (!this.hasPad('grill_1') && !this.hasPad('counter_1')) return;
 
-    if (this.inGrillZone()) {
+    if (this.hasPad('grill_1') && this.inGrillZone()) {
       const slots = this.grillSlotCount();
       for (let i = 0; i < slots; i++) {
         const s = g.slots[i];
@@ -534,7 +860,7 @@ export class Game {
       }
     }
 
-    if (this.inPrepZone()) {
+    if (this.hasPad('grill_1') && this.inPrepZone()) {
       if (this.player.patties > 0) {
         prep.patties += this.player.patties;
         this.player.patties = 0;
@@ -570,7 +896,7 @@ export class Game {
       if (this.tutorialStep <= 3) this.tutorialStep = 4;
     }
 
-    if (this.inTrashZone() && (this.player.patties > 0 || burgerSum(this.player.burgers) > 0)) {
+    if (this.hasPad('counter_1') && this.inTrashZone() && (this.player.patties > 0 || burgerSum(this.player.burgers) > 0)) {
       this.player.patties = 0;
       this.player.burgers = emptyBurgers();
       this.float('🗑️', this.player.x, this.player.z, '#95a5a6');
@@ -581,6 +907,9 @@ export class Game {
       if (this.inTableZone(tb)) {
         tb.dirty = false;
         this.state.cash += 3;
+        this.state.sessionEarned += 3;
+        this.state.totalCleaned++;
+        this.bumpMission('clean', 1);
         this.float('+$3', tb.x, tb.z, '#2ecc71');
         this.world.punchTableClean(tb);
         this.float('✨', tb.x, tb.z, '#f1c40f');
@@ -642,10 +971,11 @@ export class Game {
   updateGrill(dt: number) {
     const inZone = this.inGrillZone();
     const done = this.state.tutorialDone;
-    if (!done && !inZone) return;
-    const slots = this.grillSlotCount();
-    if (done) {
-      for (let i = 0; i < slots; i++) {
+    const cookAfk = !!this.state.hasCook;
+    if (!done && !inZone && !cookAfk) return;
+    const slots = this.grillSlotCount() + (this.hasPad('grill_2') ? 1 : 0);
+    if (done || cookAfk) {
+      for (let i = 0; i < Math.min(slots, this.layout.grill.slots.length); i++) {
         const s = this.layout.grill.slots[i];
         if (s.state === 'empty') {
           s.state = 'cooking';
@@ -654,7 +984,7 @@ export class Game {
         }
       }
     }
-    const rate = (done && inZone) ? 1.35 : 1;
+    const rate = ((done || cookAfk) && (inZone || cookAfk)) ? 1.35 : 1;
     const need = this.grillCookTime();
     this.layout.grill.slots.forEach((s, i) => {
       if (i >= slots) {
@@ -685,19 +1015,23 @@ export class Game {
     const unlocked = this.world.tables.filter((tb) => tb.unlocked);
     const waiting = this.customers.filter((c) => c.state === 'queue').length;
     const maxQueue = Math.min(4, 1 + Math.floor(this.state.tablesUnlocked / 2));
+    if (!this.coreReady() || unlocked.length < 1) return;
     if (this.spawnTimer <= 0 && waiting < maxQueue) {
       const baseGap = this.isTraining() ? 2.6 : 4.5;
       this.spawnTimer = Math.max(1.2, baseGap - this.state.tablesUnlocked * 0.25);
       const trait = this.pickTrait();
       const order = pickOrderKind(
         this.state.totalServed,
-        this.state.tutorialDone,
-        this.state.hasCheese,
-        this.state.hasDoubleMenu,
+        this.state.tutorialDone || this.coreReady(),
+        this.cheeseOk(),
+        this.doubleOk(),
       );
       const pat = this.patienceStart(order, trait);
+      const fromStreet = this.state.openZones.includes('street');
+      const sx = fromStreet ? this.world.streetSpawn.x : -0.4;
+      const sz = fromStreet ? this.world.streetSpawn.z : 5.2;
       this.customers.push({
-        x: -0.6, z: 5.5, state: 'queue',
+        x: sx, z: sz, state: 'queue',
         patience: pat, patienceMax: pat, order, trait,
         shirt: `hsl(${(Math.random() * 360) | 0},62%,56%)`,
         skin: SKINS[(Math.random() * SKINS.length) | 0],
@@ -727,9 +1061,15 @@ export class Game {
           c.table = free;
           free.customer = c;
           const pay = this.payForCustomer(c);
-          this.state.cash += pay;
+          const tip = Math.floor(pay * (0.4 + Math.random() * 0.2));
+          const instant = pay - tip;
+          this.state.cash += instant;
+          this.state.sessionEarned += pay;
           this.state.totalServed++;
-          this.float(`+$${pay}`, free.x, free.z, '#f1c40f');
+          this.bumpMission('serve', 1);
+          this.syncMissionEarn();
+          (c as any)._tip = tip;
+          this.float(`+$${instant}`, free.x, free.z, '#f1c40f');
           this.float(menuItem(need).icon, free.x, free.z + 0.3, '#fff');
           sfx.play('pay');
           this.world.punchCounter();
@@ -761,6 +1101,8 @@ export class Game {
           if (c.table) {
             c.table.dirty = true;
             c.table.customer = null;
+            const tip = (c as any)._tip || Math.floor(menuItem(c.order).pay * 0.45);
+            if (tip > 0) this.world.spawnFloorCoin(c.table.x + 0.35, c.table.z + 0.35, tip);
           }
           c.state = 'leave';
         }
@@ -837,6 +1179,9 @@ export class Game {
     if (dist(w, dirty) < 0.7) {
       dirty.dirty = false;
       this.state.cash += 2;
+      this.state.sessionEarned += 2;
+      this.state.totalCleaned++;
+      this.bumpMission('clean', 1);
     }
   }
 
@@ -851,6 +1196,18 @@ export class Game {
 
   tutorialTarget(): { x: number; z: number } | null {
     if (this.state.tutorialDone || this.tutorialStep >= 5) return null;
+    if (!this.hasPad('table_1')) {
+      const p = BUILD_PADS.find((x) => x.id === 'table_1')!;
+      return { x: p.x, z: p.z };
+    }
+    if (!this.hasPad('grill_1')) {
+      const p = BUILD_PADS.find((x) => x.id === 'grill_1')!;
+      return { x: p.x, z: p.z };
+    }
+    if (!this.hasPad('counter_1')) {
+      const p = BUILD_PADS.find((x) => x.id === 'counter_1')!;
+      return { x: p.x, z: p.z };
+    }
     if (this.tutorialStep <= 1) return this.layout.grill.interact;
     if (this.tutorialStep === 2) return this.layout.prep.interact;
     if (this.tutorialStep === 3) return this.layout.counter.interact;
@@ -884,6 +1241,10 @@ export class Game {
       return;
     }
 
+    if (!this.hasPad('table_1') || !this.hasPad('grill_1') || !this.hasPad('counter_1')) {
+      this.hintKey = 'hintPad';
+      return;
+    }
     const keys = ['hintCook', 'hintPick', 'hintStack', 'hintServe', 'hintClean'];
     this.hintKey = keys[Math.min(this.tutorialStep, keys.length - 1)];
     if (this.tutorialStep === 4 && !this.world.tables.some((tb) => tb.dirty)) {
@@ -1183,6 +1544,25 @@ export class Game {
         parts.push(`<span class="ms-item${unlocked ? '' : ' locked'}" title="${t(m.nameKey)}">${m.icon} $${m.pay}</span>`);
       }
       menuStrip.innerHTML = parts.join('');
+    }
+    const xp = xpProgress(this.state.restaurantXP);
+    const lvLabel = document.getElementById('restLvLabel');
+    const xpLabel = document.getElementById('restXpLabel');
+    const xpBar = document.getElementById('restXpBar');
+    if (lvLabel) lvLabel.textContent = tf('hudRestLv', { n: xp.level });
+    if (xpLabel) xpLabel.textContent = tf('hudXp', { into: Math.floor(xp.into), need: xp.need });
+    if (xpBar) xpBar.style.width = `${Math.floor(xp.pct * 100)}%`;
+    const m = MISSIONS[this.state.missionIndex % MISSIONS.length];
+    const mt = document.getElementById('missionTitle');
+    const mb = document.getElementById('missionBody');
+    const mbar = document.getElementById('missionBar');
+    if (mt) mt.textContent = t('missionTitle');
+    if (m && mb) {
+      const prog = m.kind === 'earn'
+        ? Math.min(m.target, Math.floor(this.state.sessionEarned))
+        : this.state.missionProgress;
+      mb.textContent = `${t(m.labelKey)} (${prog}/${m.target})`;
+      if (mbar) mbar.style.width = `${Math.floor(Math.min(1, prog / m.target) * 100)}%`;
     }
   }
 
