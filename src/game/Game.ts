@@ -25,9 +25,12 @@ interface Prep { patties: number; burgers: number }
 interface Counter { burgers: number }
 interface Player {
   x: number; z: number;
+  vx: number; vz: number;
   patties: number; burgers: number; dirty: number;
   facing: number; walk: number;
 }
+interface StationSolid { x: number; z: number; hw: number; hd: number }
+interface InteractPad { x: number; z: number; r: number }
 interface Worker {
   type: 'waiter' | 'cleaner';
   x: number; z: number;
@@ -62,11 +65,12 @@ export class Game {
 
   state = this.defaultState();
   layout!: {
-    grill: { x: number; z: number; r: number; slots: GrillSlot[] };
-    prep: Prep & { x: number; z: number; r: number };
-    counter: Counter & { x: number; z: number; r: number };
-    trash: { x: number; z: number; r: number };
+    grill: { x: number; z: number; r: number; slots: GrillSlot[]; interact: InteractPad; solid: StationSolid };
+    prep: Prep & { x: number; z: number; r: number; interact: InteractPad; solid: StationSolid };
+    counter: Counter & { x: number; z: number; r: number; interact: InteractPad; solid: StationSolid };
+    trash: { x: number; z: number; r: number; interact: InteractPad; solid: StationSolid };
   };
+  solids: StationSolid[] = [];
   customers: Customer[] = [];
   workers: Worker[] = [];
   spawnTimer = 0;
@@ -99,6 +103,7 @@ export class Game {
   }
 
   buildLayout() {
+    // Furniture center vs interact pad in front (player stands at pad, not inside mesh)
     this.layout = {
       grill: {
         x: -6, z: -2.5, r: 1.6,
@@ -107,11 +112,37 @@ export class Game {
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
         ],
+        interact: { x: -6, z: -0.85, r: 1.35 },
+        solid: { x: -6, z: -2.5, hw: 1.35, hd: 0.95 },
       },
-      prep: { x: -6, z: 0.9, r: 1.5, patties: 0, burgers: 0 },
-      counter: { x: -2.2, z: 0.2, r: 1.8, burgers: 0 },
-      trash: { x: -7.2, z: 4.2, r: 1.2 },
+      prep: {
+        x: -6, z: 0.9, r: 1.5, patties: 0, burgers: 0,
+        interact: { x: -6, z: 2.35, r: 1.25 },
+        solid: { x: -6, z: 0.9, hw: 1.2, hd: 0.85 },
+      },
+      counter: {
+        x: -2.2, z: 0.2, r: 1.8, burgers: 0,
+        interact: { x: -2.2, z: 1.85, r: 1.35 },
+        solid: { x: -2.2, z: 0.2, hw: 1.5, hd: 0.7 },
+      },
+      trash: {
+        x: -7.2, z: 4.2, r: 1.2,
+        interact: { x: -7.2, z: 3.2, r: 1.1 },
+        solid: { x: -7.2, z: 4.2, hw: 0.7, hd: 0.7 },
+      },
     };
+    this.solids = [
+      this.layout.grill.solid,
+      this.layout.prep.solid,
+      this.layout.counter.solid,
+      this.layout.trash.solid,
+      // tables as mild solids so you walk around them
+      { x: 1.2, z: 2.6, hw: 0.85, hd: 0.85 },
+      { x: 3.6, z: 2.6, hw: 0.85, hd: 0.85 },
+      { x: 6.0, z: 2.6, hw: 0.85, hd: 0.85 },
+      { x: 1.2, z: 4.6, hw: 0.85, hd: 0.85 },
+      { x: 3.6, z: 4.6, hw: 0.85, hd: 0.85 },
+    ];
   }
 
   playerSpeed() { return 4.2 + this.state.speedLv * 0.55; }
@@ -163,7 +194,7 @@ export class Game {
   start() {
     this.load();
     this.player = {
-      x: -4.5, z: 0, patties: 0, burgers: 0, dirty: 0, facing: 1, walk: 0,
+      x: -4.5, z: 0, vx: 0, vz: 0, patties: 0, burgers: 0, dirty: 0, facing: 1, walk: 0,
     };
     this.world.createPlayer();
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, 0, false);
@@ -290,19 +321,58 @@ export class Game {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) mx -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) mx += 1;
     const len = Math.hypot(mx, mz);
-    const moving = len > 0.05;
-    if (moving) {
-      mx /= len; mz /= len;
-      if (mx !== 0) this.player.facing = mx >= 0 ? 1 : -1;
-      this.player.walk += dt * 12;
-      const sp = this.playerSpeed();
-      this.player.x = clamp(this.player.x + mx * sp * dt, -8.8, 8.8);
-      this.player.z = clamp(this.player.z + mz * sp * dt, -5.2, 5.2);
-    } else {
-      this.player.walk *= 0.85;
+    const sp = this.playerSpeed();
+    let tx = 0;
+    let tz = 0;
+    if (len > 0.05) {
+      tx = (mx / len) * sp;
+      tz = (mz / len) * sp;
+      if (Math.abs(mx) > 0.05) this.player.facing = mx >= 0 ? 1 : -1;
     }
+    // Smooth accel / friction (arcade-idle feel)
+    const accel = len > 0.05 ? 18 : 22;
+    this.player.vx = lerp(this.player.vx, tx, clamp(accel * dt, 0, 1));
+    this.player.vz = lerp(this.player.vz, tz, clamp(accel * dt, 0, 1));
+    if (Math.hypot(this.player.vx, this.player.vz) < 0.05) {
+      this.player.vx = 0;
+      this.player.vz = 0;
+    }
+    const moving = Math.hypot(this.player.vx, this.player.vz) > 0.08;
+    if (moving) this.player.walk += dt * (10 + Math.hypot(this.player.vx, this.player.vz));
+    else this.player.walk *= 0.88;
+
+    // Separate axis collision so you slide along counters instead of entering them
+    this.player.x = clamp(this.player.x + this.player.vx * dt, -8.8, 8.8);
+    this.resolveSolids('x');
+    this.player.z = clamp(this.player.z + this.player.vz * dt, -5.2, 5.2);
+    this.resolveSolids('z');
+
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, this.player.walk, moving);
+    this.world.followCamera(this.player.x, this.player.z, dt);
     this.autoInteract(dt);
+  }
+
+  resolveSolids(axis: 'x' | 'z') {
+    const pr = 0.38;
+    for (const s of this.solids) {
+      const dx = this.player.x - s.x;
+      const dz = this.player.z - s.z;
+      const ox = s.hw + pr - Math.abs(dx);
+      const oz = s.hd + pr - Math.abs(dz);
+      if (ox > 0 && oz > 0) {
+        if (axis === 'x' && ox < oz) {
+          this.player.x += dx > 0 ? ox : -ox;
+          this.player.vx = 0;
+        } else if (axis === 'z' && oz <= ox) {
+          this.player.z += dz > 0 ? oz : -oz;
+          this.player.vz = 0;
+        }
+      }
+    }
+  }
+
+  nearPad(pad: InteractPad, padExtra = 0) {
+    return dist(this.player, pad) < pad.r + padExtra;
   }
 
   near(obj: { x: number; z: number; r?: number }, pad = 0) {
@@ -311,13 +381,14 @@ export class Game {
 
   getFocusStation(): { x: number; z: number; kind: string; color: number } | null {
     const list: { x: number; z: number; r: number; kind: string; color: number }[] = [
-      { ...this.layout.grill, kind: 'grill', color: 0xff6b35 },
-      { ...this.layout.prep, kind: 'prep', color: 0xf1c40f },
-      { ...this.layout.counter, kind: 'counter', color: 0x2ecc71 },
+      { ...this.layout.grill.interact, kind: 'grill', color: 0xff6b35 },
+      { ...this.layout.prep.interact, kind: 'prep', color: 0xf1c40f },
+      { ...this.layout.counter.interact, kind: 'counter', color: 0x2ecc71 },
     ];
     for (const tb of this.world.tables) {
       if (tb.unlocked && tb.dirty) {
-        list.push({ x: tb.x, z: tb.z, r: 1.3, kind: 'table', color: 0xe67e22 });
+        // stand in front of table (slightly toward kitchen / -z)
+        list.push({ x: tb.x, z: tb.z - 0.95, r: 1.15, kind: 'table', color: 0xe67e22 });
       }
     }
     let best: typeof list[0] | null = null;
@@ -337,7 +408,7 @@ export class Game {
     const g = this.layout.grill;
     const prep = this.layout.prep;
     const counter = this.layout.counter;
-    if (this.near(g)) {
+    if (this.nearPad(g.interact)) {
       for (const s of g.slots) {
         if (s.state === 'empty') {
           s.state = 'cooking';
@@ -355,7 +426,7 @@ export class Game {
         }
       }
     }
-    if (this.near(prep)) {
+    if (this.nearPad(prep.interact)) {
       if (this.player.patties > 0) {
         prep.patties += this.player.patties;
         this.player.patties = 0;
@@ -373,7 +444,7 @@ export class Game {
         if (this.tutorialStep <= 2) this.tutorialStep = 3;
       }
     }
-    if (this.near(counter) && this.player.burgers > 0) {
+    if (this.nearPad(counter.interact) && this.player.burgers > 0) {
       counter.burgers += this.player.burgers;
       this.player.burgers = 0;
       this.float('→ 🍽️', this.player.x, this.player.z);
@@ -381,7 +452,7 @@ export class Game {
     }
     for (const tb of this.world.tables) {
       if (!tb.unlocked || !tb.dirty) continue;
-      if (dist(this.player, tb) < 1.3) {
+      if (dist(this.player, { x: tb.x, z: tb.z - 0.95 }) < 1.15) {
         tb.dirty = false;
         this.state.cash += 3;
         this.float('+$3', tb.x, tb.z, '#2ecc71');
@@ -546,11 +617,12 @@ export class Game {
 
   tutorialTarget(): { x: number; z: number } | null {
     if (this.state.tutorialDone || this.tutorialStep >= 5) return null;
-    if (this.tutorialStep <= 1) return this.layout.grill;
-    if (this.tutorialStep === 2) return this.layout.prep;
-    if (this.tutorialStep === 3) return this.layout.counter;
+    if (this.tutorialStep <= 1) return this.layout.grill.interact;
+    if (this.tutorialStep === 2) return this.layout.prep.interact;
+    if (this.tutorialStep === 3) return this.layout.counter.interact;
     if (this.tutorialStep === 4) {
-      return this.world.tables.find((tb) => tb.dirty) || null;
+      const tb = this.world.tables.find((t) => t.dirty);
+      return tb ? { x: tb.x, z: tb.z - 0.95 } : null;
     }
     return null;
   }

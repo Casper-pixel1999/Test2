@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 import { box, cyl, makeCharacter, makePatty, makeBurgerMesh, makeSmokeParticle, makeMat } from './meshes';
 import { t, getLang } from '../i18n';
 
@@ -25,6 +27,8 @@ export interface GrillSlotVis {
 export class World3D {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  camPos = new THREE.Vector3(0.5, 15.5, 12);
+  camLook = new THREE.Vector3(0, 0.4, 0.5);
   renderer: THREE.WebGLRenderer;
   root: THREE.Group;
 
@@ -74,6 +78,7 @@ export class World3D {
     this.setupLights();
     this.buildRoom();
     this.buildStations();
+    this.buildInteractPads();
     this.buildFocusAndTutorial();
 
     this.handleResize();
@@ -359,6 +364,53 @@ export class World3D {
     this.root.add(this.tutorialArrow);
   }
 
+
+  buildInteractPads() {
+    const pads: { x: number; z: number; color: number }[] = [
+      { x: -6, z: -0.85, color: 0xff6b35 },
+      { x: -6, z: 2.35, color: 0xf1c40f },
+      { x: -2.2, z: 1.85, color: 0x2ecc71 },
+    ];
+    for (const p of pads) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.55, 0.95, 32),
+        new THREE.MeshBasicMaterial({
+          color: p.color,
+          transparent: true,
+          opacity: 0.45,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(p.x, 0.04, p.z);
+      this.root.add(ring);
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(0.5, 24),
+        new THREE.MeshBasicMaterial({
+          color: p.color,
+          transparent: true,
+          opacity: 0.18,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.set(p.x, 0.035, p.z);
+      this.root.add(disc);
+    }
+  }
+
+  followCamera(px: number, pz: number, dt: number) {
+    const desiredPos = new THREE.Vector3(px * 0.35 + 0.5, 15.2, pz * 0.25 + 12.2);
+    const desiredLook = new THREE.Vector3(px * 0.55, 0.5, pz * 0.55 + 0.3);
+    const k = clamp01(1 - Math.exp(-5.5 * dt));
+    this.camPos.lerp(desiredPos, k);
+    this.camLook.lerp(desiredLook, k);
+    this.camera.position.copy(this.camPos);
+    this.camera.lookAt(this.camLook);
+  }
+
   createPlayer() {
     this.playerMesh = makeCharacter({ shirt: 0xf4f6f7, hat: 'chef', scale: 1.05 });
     this.playerStack = new THREE.Group();
@@ -370,8 +422,22 @@ export class World3D {
 
   setPlayerPose(x: number, z: number, facing: number, walk: number, moving: boolean) {
     if (!this.playerMesh) return;
-    this.playerMesh.position.set(x, 0, z);
-    this.playerMesh.rotation.y = facing >= 0 ? 0.4 : Math.PI - 0.4;
+    const mesh = this.playerMesh;
+    if (mesh.userData.vizX == null) {
+      mesh.userData.vizX = x;
+      mesh.userData.vizZ = z;
+      mesh.userData.vizYaw = facing >= 0 ? 0.4 : Math.PI - 0.4;
+    }
+    mesh.userData.vizX = THREE.MathUtils.lerp(mesh.userData.vizX, x, 0.28);
+    mesh.userData.vizZ = THREE.MathUtils.lerp(mesh.userData.vizZ, z, 0.28);
+    const yaw = facing >= 0 ? 0.4 : Math.PI - 0.4;
+    let cur = mesh.userData.vizYaw as number;
+    let diff = yaw - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    mesh.userData.vizYaw = cur + diff * 0.22;
+    mesh.position.set(mesh.userData.vizX, 0, mesh.userData.vizZ);
+    mesh.rotation.y = mesh.userData.vizYaw;
     const bob = moving ? Math.sin(walk) * 0.04 : 0;
     const parts = this.playerMesh.userData.bobParts;
     if (parts) {
