@@ -19,11 +19,19 @@
 
     <div id="hud" class="hidden">
       <div class="hud-top">
-        <div class="cash" id="cashDisplay">💰 0</div>
-        <div class="hint" id="hintText"></div>
-        <button type="button" id="btnShop" class="btn">🛒</button>
-        <button type="button" id="btnReward" class="btn reward" title="x2">🎬 x2</button>
-        <button type="button" id="btnLang" class="btn">RU</button>
+        <div class="cash-wrap">
+          <div class="cash" id="cashDisplay">💰 0</div>
+          <div class="carry" id="carryDisplay">🍖 0 · 🍔 0</div>
+        </div>
+        <div class="hud-actions">
+          <button type="button" id="btnShop" class="btn" aria-label="Shop">🛒</button>
+          <button type="button" id="btnReward" class="btn reward" title="x2">🎬 x2</button>
+          <button type="button" id="btnLang" class="btn">RU</button>
+        </div>
+      </div>
+      <div id="hintBanner" class="hint-banner">
+        <div id="hintStep" class="hint-step"></div>
+        <div id="hintText" class="hint"></div>
       </div>
       <div id="tutorialArrow" class="hidden">▼</div>
     </div>
