@@ -1,8 +1,34 @@
 import * as THREE from 'three';
-
-function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 import { box, cyl, makeCharacter, setCharPose, makePatty, makeBurgerMesh, makeSmokeParticle } from './meshes';
 import { t, tf, getLang } from '../i18n';
+
+function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
+
+function disposeObject(obj: THREE.Object3D) {
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if ((mesh as any).isMesh || (mesh as any).isSprite) {
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (mat) {
+        const mats = Array.isArray(mat) ? mat : [mat];
+        for (const m of mats) {
+          const map = (m as THREE.MeshBasicMaterial).map;
+          if (map) map.dispose();
+          m.dispose();
+        }
+      }
+    }
+  });
+}
+
+function clearGroup(g: THREE.Object3D) {
+  while (g.children.length) {
+    const ch = g.children[0];
+    g.remove(ch);
+    disposeObject(ch);
+  }
+}
 
 export type StationKind = 'grill' | 'prep' | 'counter' | 'table' | 'trash';
 
@@ -855,9 +881,13 @@ export class World3D {
   }
 
   updatePlayerStack(patties: number, burgers: ('classic' | 'cheese' | 'double')[] | number) {
-    while (this.playerStack.children.length) {
-      this.playerStack.remove(this.playerStack.children[0]);
-    }
+    const list = Array.isArray(burgers)
+      ? burgers
+      : Array.from({ length: burgers }, () => 'classic' as const);
+    const key = `p${patties}|${list.join(',')}`;
+    if (this.playerStack.userData.stackKey === key) return;
+    this.playerStack.userData.stackKey = key;
+    clearGroup(this.playerStack);
     let y = 0;
     for (let i = 0; i < patties; i++) {
       const p = makePatty(true);
@@ -866,9 +896,6 @@ export class World3D {
       this.playerStack.add(p);
       y += 0.12;
     }
-    const list = Array.isArray(burgers)
-      ? burgers
-      : Array.from({ length: burgers }, () => 'classic' as const);
     for (const kind of list) {
       const b = makeBurgerMesh(kind);
       b.position.y = y;
@@ -956,7 +983,10 @@ export class World3D {
     const icons = Array.isArray(burgers)
       ? burgers.slice(0, 4).map((k) => (k === 'cheese' ? '🧀' : k === 'double' ? '🍔×2' : '🍔')).join('')
       : '🍔'.repeat(Math.min(n, 4));
-    this.updateSpriteText(this.prepLabel, `🍖${patties}  ${icons || '—'}`);
+    const txt = `🍖${patties}  ${icons || '—'}`;
+    if (this.prepLabel.userData.lastTxt !== txt) {
+      this.updateSpriteText(this.prepLabel, txt);
+    }
   }
 
   punchCounter() {
@@ -964,17 +994,19 @@ export class World3D {
   }
 
   syncCounter(burgers: ('classic' | 'cheese' | 'double')[] | number, dt = 0.016) {
-    while (this.counterStack.children.length) {
-      this.counterStack.remove(this.counterStack.children[0]);
-    }
     const list = Array.isArray(burgers)
       ? burgers.slice(0, 8)
       : Array.from({ length: Math.min(burgers, 8) }, () => 'classic' as const);
-    for (let i = 0; i < list.length; i++) {
-      const b = makeBurgerMesh(list[i]);
-      b.position.y = i * 0.2;
-      b.scale.setScalar(0.7);
-      this.counterStack.add(b);
+    const key = list.join(',');
+    if (this.counterStack.userData.stackKey !== key) {
+      this.counterStack.userData.stackKey = key;
+      clearGroup(this.counterStack);
+      for (let i = 0; i < list.length; i++) {
+        const b = makeBurgerMesh(list[i]);
+        b.position.y = i * 0.2;
+        b.scale.setScalar(0.7);
+        this.counterStack.add(b);
+      }
     }
     if (this.counterPunchT > 0) {
       this.counterPunchT = Math.max(0, this.counterPunchT - dt);
@@ -1081,6 +1113,7 @@ export class World3D {
     for (const [c, mesh] of this.customerMeshes) {
       if (!alive.has(c)) {
         this.root.remove(mesh);
+        disposeObject(mesh);
         this.customerMeshes.delete(c);
       }
     }
@@ -1128,6 +1161,7 @@ export class World3D {
     for (const [w, mesh] of this.workerMeshes) {
       if (!alive.has(w)) {
         this.root.remove(mesh);
+        disposeObject(mesh);
         this.workerMeshes.delete(w);
       }
     }
@@ -1136,20 +1170,33 @@ export class World3D {
       mesh.position.set(w.x, 0, w.z);
       mesh.rotation.y = (w.facing ?? 1) >= 0 ? 0.3 : Math.PI - 0.3;
       const stack = mesh.getObjectByName('stack') as THREE.Group;
-      const carryN = w.carrying || 0;
+      const carryN = typeof w._vizCarry === 'number'
+        ? w._vizCarry
+        : (typeof w.carrying === 'number' ? w.carrying : 0);
+      const trash = !!w.carryingTrash;
       if (stack) {
-        while (stack.children.length) stack.remove(stack.children[0]);
-        for (let i = 0; i < carryN; i++) {
-          const b = makeBurgerMesh();
-          b.position.y = i * 0.18;
-          b.scale.setScalar(0.62);
-          stack.add(b);
+        const key = trash ? 'trash' : `b${carryN}`;
+        if (stack.userData.stackKey !== key) {
+          stack.userData.stackKey = key;
+          clearGroup(stack);
+          if (trash) {
+            const bag = box(0.28, 0.36, 0.22, 0x2a2a2e, 0);
+            bag.position.y = 0.18;
+            stack.add(bag);
+          } else {
+            for (let i = 0; i < carryN; i++) {
+              const b = makeBurgerMesh();
+              b.position.y = i * 0.18;
+              b.scale.setScalar(0.62);
+              stack.add(b);
+            }
+          }
         }
       }
       const moving = (w.walk || 0) > 0.05;
       setCharPose(mesh, {
         moving,
-        carry: carryN > 0,
+        carry: carryN > 0 || trash,
         t: w.walk || 0,
       });
     }
@@ -1191,6 +1238,8 @@ export class World3D {
   }
 
   updateSpriteText(spr: THREE.Sprite, text: string) {
+    if (spr.userData.lastTxt === text) return;
+    spr.userData.lastTxt = text;
     const canvas = (spr as any)._canvas as HTMLCanvasElement;
     const ctx = (spr as any)._ctx as CanvasRenderingContext2D;
     const opts = (spr as any)._opts || {};
@@ -1291,7 +1340,11 @@ export class World3D {
       const costTxt = p.locked
         ? `🔒 ${p.lockLv != null ? tf('padLockedLv', { n: p.lockLv }) : ''}`
         : (p.cost <= 0 ? 'FREE' : (p.paid > 0 && p.paid < p.cost ? `$${Math.floor(p.paid)}/$${p.cost}` : `$${p.cost}`));
-      this.updateSpriteText(label, `${p.label}\n${costTxt}`);
+      const txt = `${p.label}\n${costTxt}`;
+      if (g.userData.lastTxt !== txt) {
+        g.userData.lastTxt = txt;
+        this.updateSpriteText(label, txt);
+      }
 
       if (p.locked) {
         discMat.color.setHex(0x5a554c);

@@ -52,6 +52,7 @@ interface Worker {
   x: number; z: number;
   carrying: BurgerCounts; task: any;
   facing: number; walk: number;
+  carryingTrash: boolean;
 }
 type CustTrait = 'regular' | 'hurried' | 'vip';
 interface Customer {
@@ -251,12 +252,12 @@ export class Game {
     this.workers = [];
     if (this.state.hasWaiter) {
       this.workers.push({
-        type: 'waiter', x: -4, z: 0, carrying: emptyBurgers(), task: null, facing: 1, walk: 0,
+        type: 'waiter', x: -4, z: 0, carrying: emptyBurgers(), task: null, facing: 1, walk: 0, carryingTrash: false,
       });
     }
     if (this.state.hasCleaner) {
       this.workers.push({
-        type: 'cleaner', x: 1, z: 3.5, carrying: emptyBurgers(), task: null, facing: 1, walk: 0,
+        type: 'cleaner', x: 1, z: 3.5, carrying: emptyBurgers(), task: null, facing: 1, walk: 0, carryingTrash: false,
       });
     }
     this.world.syncTables();
@@ -1196,6 +1197,21 @@ export class Game {
   }
 
   updateCleaner(w: Worker, dt: number) {
+    // Dump trash at bin first if carrying
+    if (w.carryingTrash) {
+      const trash = this.layout.trash;
+      this.moveEntity(w, trash.x, trash.z, 2.8, dt);
+      if (dist(w, trash) < 0.85) {
+        w.carryingTrash = false;
+        this.state.cash += 2;
+        this.state.sessionEarned += 2;
+        this.state.totalCleaned++;
+        this.bumpMission('clean', 1);
+        this.float('+$2', trash.x, trash.z, '#5a8f6b');
+        sfx.play('clean');
+      }
+      return;
+    }
     const dirty = this.world.tables.find((tb) => tb.unlocked && tb.dirty);
     if (!dirty) {
       this.moveEntity(w, 1, 3.5, 2.5, dt);
@@ -1204,10 +1220,8 @@ export class Game {
     this.moveEntity(w, dirty.x, dirty.z, 2.8, dt);
     if (dist(w, dirty) < 0.7) {
       dirty.dirty = false;
-      this.state.cash += 2;
-      this.state.sessionEarned += 2;
-      this.state.totalCleaned++;
-      this.bumpMission('clean', 1);
+      w.carryingTrash = true;
+      this.world.punchTableClean(dirty);
     }
   }
 
@@ -1402,6 +1416,10 @@ export class Game {
   float(text: string, x: number, z: number, color = '#fff') {
     const layer = document.getElementById('floatLayer');
     if (!layer) return;
+    while (this.floatTexts.length >= 20) {
+      const old = this.floatTexts.shift()!;
+      old.el.remove();
+    }
     const el = document.createElement('div');
     el.className = 'float-text';
     el.textContent = text;
@@ -1489,10 +1507,10 @@ export class Game {
     this.world.syncCounter(burgersToStack(this.layout.counter.burgers), this.dt);
     this.world.syncTables(this.dt);
     this.world.syncCustomers(this.customers, this.time);
-    this.world.syncWorkers(this.workers.map((w) => ({
-      ...w,
-      carrying: burgerSum(w.carrying),
-    })));
+    for (const w of this.workers) {
+      (w as any)._vizCarry = burgerSum(w.carrying);
+    }
+    this.world.syncWorkers(this.workers);
     this.world.updatePlayerStack(this.player.patties, burgersToStack(this.player.burgers));
 
     const focus = this.getFocusStation();
