@@ -67,10 +67,10 @@ async function boot() {
   document.getElementById('joystick')?.classList.remove('hidden');
 
   loadingReady();
-  game.start();
+  await game.start();
 
   if (mocked) console.info('[Бургерная] YaGames mocked locally');
-  (window as any).__burgerGame = game;
+  if (import.meta.env.DEV) (window as any).__burgerGame = game;
 }
 
 boot().catch((e) => {

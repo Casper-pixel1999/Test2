@@ -19,9 +19,10 @@ npm run dev
 ## Сборка для Яндекс Игр
 
 ```bash
-npm run build
-cd dist && zip -r ../burger-rush-yandex.zip .
+npm run pack:yandex
 ```
+
+Либо вручную: `npm run build && cd dist && zip -r ../burger-rush-yandex.zip .`
 
 В консоли загрузите ZIP. Точка входа: `index.html`. Пути относительные (`base: './'`). На платформе Яндекс подставляет свой `/sdk.js`.
 
@@ -73,7 +74,6 @@ legacy/          # предыдущая canvas-версия
 
 - Один уровень / одна комната (как в v1)
 - Процедурные меши без внешних 3D-ассетов
-- Нет звука / музыки
 - Простая ИИ официанта и уборщика
 
 ## Лицензия

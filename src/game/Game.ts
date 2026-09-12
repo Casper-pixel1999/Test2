@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import { gameplayStart, gameplayStop, cloudSave, showRewarded, showFullscreen } from '../yandex';
+import { gameplayStart, gameplayStop, cloudSave, cloudLoad, showRewarded, showFullscreen } from '../yandex';
 import { World3D } from './World3D';
 import { sfx } from './audio';
 import {
@@ -254,8 +254,14 @@ export class Game {
     await cloudSave({ ...this.state });
   }
 
-  start() {
+  async start() {
     this.load();
+    const cloud = await cloudLoad();
+    if (cloud && typeof cloud === 'object') {
+      Object.assign(this.state, cloud);
+      this.applyUnlocks();
+      if (this.state.tutorialDone) this.tutorialStep = 5;
+    }
     this.player = {
       x: -4.5, z: 0, vx: 0, vz: 0,
       patties: 0, burgers: emptyBurgers(), dirty: 0, facing: 1, walk: 0,
@@ -279,6 +285,7 @@ export class Game {
     if (p === this.paused) return;
     this.paused = p;
     document.getElementById('pauseOverlay')?.classList.toggle('hidden', !p);
+    sfx.setPauseMute(p);
     if (p) gameplayStop();
     else {
       this.lastTs = performance.now();
@@ -1251,16 +1258,24 @@ export class Game {
   async closeShop() {
     this.shopOpen = false;
     document.getElementById('shop')?.classList.add('hidden');
-    if (!this.paused) gameplayStart();
-    if (!this.state.tutorialDone) return;
+    if (!this.state.tutorialDone) {
+      if (!this.paused) gameplayStart();
+      return;
+    }
     if (this.time - this._lastFsAt > 90) {
       this._lastFsAt = this.time;
+      this.setPaused(true);
       await showFullscreen();
+      this.setPaused(false);
+    } else if (!this.paused) {
+      gameplayStart();
     }
   }
 
   async onReward() {
+    this.setPaused(true);
     const ok = await showRewarded();
+    this.setPaused(false);
     if (ok) {
       this.doubleProfitUntil = this.time + 60;
       this.float(t('rewardOk'), this.player.x, this.player.z, '#f1c40f');

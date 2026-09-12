@@ -5,6 +5,7 @@ const MUTE_KEY = 'burger_rush_muted';
 
 export class Sfx {
   muted = false;
+  private pauseMuted = false;
   private ctx: AudioContext | null = null;
   private unlocked = false;
 
@@ -24,6 +25,11 @@ export class Sfx {
     return this.muted;
   }
 
+  /** Temporary mute for pause/ads — does not change persisted user preference */
+  setPauseMute(on: boolean) {
+    this.pauseMuted = on;
+  }
+
   /** Call from first user gesture so AudioContext can start */
   unlock() {
     if (this.unlocked) return;
@@ -41,7 +47,7 @@ export class Sfx {
   }
 
   play(id: SfxId) {
-    if (this.muted) return;
+    if (this.muted || this.pauseMuted) return;
     const ctx = this.ensure();
     if (!ctx) return;
     if (ctx.state === 'suspended') void ctx.resume();

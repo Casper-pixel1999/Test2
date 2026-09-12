@@ -116,6 +116,16 @@ export function detectLang(fallback = 'ru') {
   return fallback;
 }
 
+function adOpen() {
+  gameplayStop();
+  window.dispatchEvent(new CustomEvent('yg-pause'));
+}
+
+function adClose() {
+  window.dispatchEvent(new CustomEvent('yg-resume'));
+  gameplayStart();
+}
+
 export function showFullscreen() {
   return new Promise<boolean>((resolve) => {
     if (!ysdk?.adv?.showFullscreenAdv) {
@@ -125,19 +135,19 @@ export function showFullscreen() {
     try {
       ysdk.adv.showFullscreenAdv({
         callbacks: {
-          onOpen() { gameplayStop(); },
+          onOpen() { adOpen(); },
           onClose(wasShown: boolean) {
-            gameplayStart();
+            adClose();
             resolve(!!wasShown);
           },
           onError() {
-            gameplayStart();
+            adClose();
             resolve(false);
           },
         },
       });
     } catch (_) {
-      gameplayStart();
+      adClose();
       resolve(false);
     }
   });
@@ -153,20 +163,20 @@ export function showRewarded() {
     try {
       ysdk.adv.showRewardedVideo({
         callbacks: {
-          onOpen() { gameplayStop(); },
+          onOpen() { adOpen(); },
           onRewarded() { rewarded = true; },
           onClose() {
-            gameplayStart();
+            adClose();
             resolve(rewarded);
           },
           onError() {
-            gameplayStart();
+            adClose();
             resolve(false);
           },
         },
       });
     } catch (_) {
-      gameplayStart();
+      adClose();
       resolve(false);
     }
   });
