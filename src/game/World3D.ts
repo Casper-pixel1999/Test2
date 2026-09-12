@@ -366,45 +366,47 @@ export class World3D {
 
 
   buildInteractPads() {
+    // Floor top is ~y=0.06 — pads MUST sit above it or they are invisible (z-fight / inside mesh)
     type Pad = { x: number; z: number; color: number; r?: number };
     const pads: Pad[] = [
-      { x: -6, z: -0.85, color: 0xff6b35 },       // grill
-      { x: -6, z: 2.35, color: 0xf1c40f },        // prep / assembly
-      { x: -2.2, z: 1.85, color: 0x2ecc71 },      // serve counter
-      { x: -7.2, z: 3.2, color: 0xf1c40f, r: 0.85 }, // trash
+      { x: -6, z: -1.1, color: 0xff6b35 },        // grill (front)
+      { x: -6, z: 2.1, color: 0xf1c40f },         // prep / assembly
+      { x: -0.7, z: 0.2, color: 0x2ecc71 },       // counter (customer/kitchen approach on +x side)
+      { x: -7.2, z: 3.1, color: 0xf1c40f, r: 0.9 },
     ];
-    // One pad in front of every dining table
     for (const tb of this.tables) {
-      pads.push({ x: tb.x, z: tb.z - 0.95, color: 0x5dade2, r: 0.9 });
+      pads.push({ x: tb.x, z: tb.z - 1.05, color: 0x5dade2, r: 0.95 });
     }
+    const y = 0.13;
     for (const p of pads) {
-      const outer = p.r ?? 0.95;
-      const inner = outer * 0.55;
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(inner, outer, 32),
-        new THREE.MeshBasicMaterial({
-          color: p.color,
-          transparent: true,
-          opacity: 0.5,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        }),
-      );
+      const outer = p.r ?? 1.05;
+      const inner = outer * 0.62;
+      const matRing = new THREE.MeshBasicMaterial({
+        color: p.color,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 40), matRing);
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(p.x, 0.045, p.z);
+      ring.position.set(p.x, y, p.z);
+      ring.renderOrder = 20;
       this.root.add(ring);
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(inner * 0.95, 24),
-        new THREE.MeshBasicMaterial({
-          color: p.color,
-          transparent: true,
-          opacity: 0.2,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        }),
-      );
+
+      const matDisc = new THREE.MeshBasicMaterial({
+        color: p.color,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(inner * 0.92, 32), matDisc);
       disc.rotation.x = -Math.PI / 2;
-      disc.position.set(p.x, 0.04, p.z);
+      disc.position.set(p.x, y - 0.005, p.z);
+      disc.renderOrder = 19;
       this.root.add(disc);
     }
   }

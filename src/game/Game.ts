@@ -112,17 +112,17 @@ export class Game {
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
         ],
-        interact: { x: -6, z: -0.85, r: 1.35 },
+        interact: { x: -6, z: -1.1, r: 1.35 },
         solid: { x: -6, z: -2.5, hw: 1.35, hd: 0.95 },
       },
       prep: {
         x: -6, z: 0.9, r: 1.5, patties: 0, burgers: 0,
-        interact: { x: -6, z: 2.35, r: 1.25 },
+        interact: { x: -6, z: 2.1, r: 1.25 },
         solid: { x: -6, z: 0.9, hw: 1.2, hd: 0.85 },
       },
       counter: {
         x: -2.2, z: 0.2, r: 1.8, burgers: 0,
-        interact: { x: -2.2, z: 1.85, r: 1.35 },
+        interact: { x: -0.7, z: 0.2, r: 1.35 },
         solid: { x: -2.2, z: 0.2, hw: 1.5, hd: 0.7 },
       },
       trash: {
@@ -367,7 +367,7 @@ export class Game {
     for (const tb of this.world.tables) {
       if (tb.unlocked && tb.dirty) {
         // stand in front of table (slightly toward kitchen / -z)
-        list.push({ x: tb.x, z: tb.z - 0.95, r: 1.05, kind: 'table', color: 0x5dade2 });
+        list.push({ x: tb.x, z: tb.z - 1.05, r: 1.05, kind: 'table', color: 0x5dade2 });
       }
     }
     let best: typeof list[0] | null = null;
@@ -387,7 +387,7 @@ export class Game {
   inPrepZone() { return this.nearPad(this.layout.prep.interact); }
   inCounterZone() { return this.nearPad(this.layout.counter.interact); }
   inTableZone(tb: { x: number; z: number }) {
-    return dist(this.player, { x: tb.x, z: tb.z - 0.95 }) < 1.05;
+    return dist(this.player, { x: tb.x, z: tb.z - 1.05 }) < 1.05;
   }
 
   autoInteract(_dt: number) {
@@ -619,7 +619,7 @@ export class Game {
     if (this.tutorialStep === 3) return this.layout.counter.interact;
     if (this.tutorialStep === 4) {
       const tb = this.world.tables.find((t) => t.dirty);
-      return tb ? { x: tb.x, z: tb.z - 0.95 } : null;
+      return tb ? { x: tb.x, z: tb.z - 1.05 } : null;
     }
     return null;
   }
