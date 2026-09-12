@@ -157,29 +157,29 @@ export class Game {
   buildLayout() {
     this.layout = {
       grill: {
-        x: -7.2, z: -1.6, r: 1.6,
+        x: -8.0, z: -2.8, r: 1.6,
         slots: [
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
         ],
-        interact: { x: -7.2, z: -0.3, r: 1.35 },
-        solid: { x: -7.2, z: -1.6, hw: 1.35, hd: 0.95 },
+        interact: { x: -8.0, z: -1.5, r: 1.35 },
+        solid: { x: -8.0, z: -2.8, hw: 1.35, hd: 0.95 },
       },
       prep: {
-        x: -7.2, z: 1.4, r: 1.5, patties: 0, burgers: emptyBurgers(), craft: null,
-        interact: { x: -7.2, z: 2.5, r: 1.25 },
-        solid: { x: -7.2, z: 1.4, hw: 1.2, hd: 0.85 },
+        x: -8.0, z: 2.0, r: 1.5, patties: 0, burgers: emptyBurgers(), craft: null,
+        interact: { x: -8.0, z: 3.1, r: 1.25 },
+        solid: { x: -8.0, z: 2.0, hw: 1.2, hd: 0.85 },
       },
       counter: {
-        x: -2.0, z: 0.4, r: 1.8, burgers: emptyBurgers(),
-        interact: { x: -0.5, z: 0.4, r: 1.35 },
-        solid: { x: -2.0, z: 0.4, hw: 1.5, hd: 0.7 },
+        x: -2.2, z: 0.0, r: 1.8, burgers: emptyBurgers(),
+        interact: { x: -0.5, z: 0.0, r: 1.35 },
+        solid: { x: -2.2, z: 0.0, hw: 1.5, hd: 0.7 },
       },
       trash: {
-        x: -9.5, z: 3.8, r: 1.2,
-        interact: { x: -9.5, z: 2.8, r: 1.1 },
-        solid: { x: -9.5, z: 3.8, hw: 0.7, hd: 0.7 },
+        x: -11.0, z: 4.5, r: 1.2,
+        interact: { x: -11.0, z: 3.5, r: 1.1 },
+        solid: { x: -11.0, z: 4.5, hw: 0.7, hd: 0.7 },
       },
     };
     this.solids = [

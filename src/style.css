@@ -199,7 +199,7 @@ html, body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 .panel {
-  background: linear-gradient(180deg, rgba(28,18,12,.92), rgba(20,12,8,.95));
+  background: linear-gradient(180deg, rgba(28,18,12,.62), rgba(20,12,8,.68));
   border: 2px solid #a89070;
   border-radius: 20px;
   padding: 20px 18px;
@@ -448,7 +448,7 @@ html, body {
 
 /* BP HUD */
 .rest-level {
-  background: rgba(28,18,12,.72);
+  background: rgba(28,18,12,.58);
   border: 1px solid #a89070;
   border-radius: 14px;
   padding: 6px 10px;
@@ -463,7 +463,7 @@ html, body {
   transition: width .2s;
 }
 .mission-hud {
-  background: rgba(28,18,12,.72);
+  background: rgba(28,18,12,.58);
   border: 1px solid #a89070;
   border-radius: 14px;
   padding: 6px 10px;
