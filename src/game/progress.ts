@@ -29,8 +29,8 @@ export interface MissionDef {
 
 export const MAP = { minX: -12, maxX: 12, minZ: -10, maxZ: 6 };
 
-/** restLv cum XP: 1:0 2:40 3:90 4:160 5:250 6:360 7:490 8:640 9:820 10:1020 */
-export const XP_CUM = [0, 40, 90, 160, 250, 360, 490, 640, 820, 1020];
+/** restLv cum XP: 1:0 2:40 3:90 4:150 5:230 6:330 7:450 8:590 9:760 10:950 */
+export const XP_CUM = [0, 40, 90, 150, 230, 330, 450, 590, 760, 950];
 
 export function levelFromXp(xp: number): number {
   let lv = 1;
@@ -64,18 +64,18 @@ export const BUILD_PADS: BuildPadDef[] = [
   { id: 'grill_1', kind: 'grill', x: -8.0, z: -2.8, cost: 40, xp: 12, requires: ['table_1'], minLevel: 1, labelKey: 'pad_grill_1' },
   { id: 'counter_1', kind: 'counter', x: -2.2, z: 0.0, cost: 50, xp: 12, requires: ['grill_1'], minLevel: 1, labelKey: 'pad_counter_1' },
   { id: 'table_2', kind: 'table', x: 5.9, z: 0.6, cost: 60, xp: 10, requires: ['counter_1'], minLevel: 1, tableIndex: 1, labelKey: 'pad_table_2' },
-  { id: 'expand_hr', kind: 'expand_hr', x: -8.5, z: -4.5, cost: 120, xp: 20, requires: ['table_2'], minLevel: 2, labelKey: 'pad_expand_hr' },
-  { id: 'expand_player', kind: 'expand_player', x: -5.5, z: -7.0, cost: 150, xp: 20, requires: ['expand_hr'], minLevel: 2, labelKey: 'pad_expand_player' },
+  { id: 'expand_hr', kind: 'expand_hr', x: -8.5, z: -4.5, cost: 110, xp: 20, requires: ['table_2'], minLevel: 2, labelKey: 'pad_expand_hr' },
+  { id: 'expand_player', kind: 'expand_player', x: -5.5, z: -7.0, cost: 135, xp: 20, requires: ['expand_hr'], minLevel: 2, labelKey: 'pad_expand_player' },
   { id: 'table_3', kind: 'table', x: 9.3, z: 0.6, cost: 100, xp: 12, requires: ['expand_player'], minLevel: 2, tableIndex: 2, labelKey: 'pad_table_3' },
-  { id: 'expand_street', kind: 'expand_street', x: 3.0, z: -4.5, cost: 200, xp: 25, requires: ['table_3'], minLevel: 3, labelKey: 'pad_expand_street' },
-  { id: 'drive_thru', kind: 'drive_thru', x: 9.8, z: -6.2, cost: 280, xp: 30, requires: ['expand_street'], minLevel: 3, labelKey: 'pad_drive_thru' },
-  { id: 'grill_2', kind: 'grill2', x: -8.0, z: -5.2, cost: 320, xp: 28, requires: ['grill_1'], minLevel: 4, labelKey: 'pad_grill_2' },
-  { id: 'table_4', kind: 'table', x: 3.2, z: 4.3, cost: 180, xp: 14, requires: ['grill_2'], minLevel: 4, tableIndex: 3, labelKey: 'pad_table_4' },
-  { id: 'expand_storage', kind: 'expand_storage', x: -10.8, z: -3.2, cost: 250, xp: 22, requires: ['counter_1'], minLevel: 4, labelKey: 'pad_expand_storage' },
-  { id: 'expand_restroom', kind: 'expand_restroom', x: 0.5, z: -4.5, cost: 300, xp: 24, requires: ['expand_hr'], minLevel: 6, labelKey: 'pad_expand_restroom' },
-  { id: 'table_5', kind: 'table', x: 6.8, z: 4.3, cost: 220, xp: 14, requires: ['expand_restroom'], minLevel: 6, tableIndex: 4, labelKey: 'pad_table_5' },
-  { id: 'cashier_desk', kind: 'cashier_desk', x: -2.2, z: 2.8, cost: 400, xp: 35, requires: ['counter_1'], minLevel: 5, labelKey: 'pad_cashier_desk' },
-  { id: 'open_wing_b', kind: 'open_wing_b', x: 10.5, z: 2.0, cost: 600, xp: 40, requires: ['table_5'], minLevel: 8, labelKey: 'pad_open_wing_b' },
+  { id: 'expand_street', kind: 'expand_street', x: 3.0, z: -4.5, cost: 170, xp: 28, requires: ['table_3'], minLevel: 3, labelKey: 'pad_expand_street' },
+  { id: 'drive_thru', kind: 'drive_thru', x: 9.8, z: -6.2, cost: 240, xp: 34, requires: ['expand_street'], minLevel: 3, labelKey: 'pad_drive_thru' },
+  { id: 'grill_2', kind: 'grill2', x: -8.0, z: -5.2, cost: 270, xp: 32, requires: ['grill_1'], minLevel: 4, labelKey: 'pad_grill_2' },
+  { id: 'table_4', kind: 'table', x: 3.2, z: 4.3, cost: 160, xp: 14, requires: ['grill_2'], minLevel: 4, tableIndex: 3, labelKey: 'pad_table_4' },
+  { id: 'expand_storage', kind: 'expand_storage', x: -10.8, z: -3.2, cost: 210, xp: 25, requires: ['counter_1'], minLevel: 4, labelKey: 'pad_expand_storage' },
+  { id: 'expand_restroom', kind: 'expand_restroom', x: 0.5, z: -4.5, cost: 255, xp: 27, requires: ['expand_hr'], minLevel: 6, labelKey: 'pad_expand_restroom' },
+  { id: 'table_5', kind: 'table', x: 6.8, z: 4.3, cost: 190, xp: 14, requires: ['expand_restroom'], minLevel: 6, tableIndex: 4, labelKey: 'pad_table_5' },
+  { id: 'cashier_desk', kind: 'cashier_desk', x: -2.2, z: 2.8, cost: 340, xp: 38, requires: ['counter_1'], minLevel: 5, labelKey: 'pad_cashier_desk' },
+  { id: 'open_wing_b', kind: 'open_wing_b', x: 10.5, z: 2.0, cost: 500, xp: 45, requires: ['table_5'], minLevel: 8, labelKey: 'pad_open_wing_b' },
 ];
 
 export const MISSIONS: MissionDef[] = [
@@ -83,19 +83,19 @@ export const MISSIONS: MissionDef[] = [
   { id: 'clean3', kind: 'clean', target: 3, reward: 25, xp: 5, labelKey: 'missionClean3' },
   { id: 'earn100', kind: 'earn', target: 100, reward: 40, xp: 8, labelKey: 'missionEarn100' },
   { id: 'build3', kind: 'build', target: 3, reward: 35, xp: 8, labelKey: 'missionBuild3' },
-  { id: 'serve15', kind: 'serve', target: 15, reward: 50, xp: 10, labelKey: 'missionServe15' },
-  { id: 'hire1', kind: 'hire', target: 1, reward: 40, xp: 10, labelKey: 'missionHire1' },
-  { id: 'clean10', kind: 'clean', target: 10, reward: 45, xp: 10, labelKey: 'missionClean10' },
-  { id: 'earn300', kind: 'earn', target: 300, reward: 80, xp: 12, labelKey: 'missionEarn300' },
+  { id: 'serve15', kind: 'serve', target: 15, reward: 65, xp: 12, labelKey: 'missionServe15' },
+  { id: 'hire1', kind: 'hire', target: 1, reward: 55, xp: 10, labelKey: 'missionHire1' },
+  { id: 'clean10', kind: 'clean', target: 10, reward: 60, xp: 12, labelKey: 'missionClean10' },
+  { id: 'earn300', kind: 'earn', target: 300, reward: 110, xp: 14, labelKey: 'missionEarn300' },
 ];
 
 export const START_CASH = 100;
 
 export const HR_HIRE = {
-  hire_cleaner: { cost: 180, xp: 15, minLevel: 2, key: 'hire_cleaner' },
-  hire_waiter: { cost: 220, xp: 15, minLevel: 2, key: 'hire_waiter' },
-  hire_cook: { cost: 260, xp: 15, minLevel: 3, key: 'hire_cook' },
-  hire_cashier: { cost: 300, xp: 15, minLevel: 5, key: 'hire_cashier' },
+  hire_cleaner: { cost: 150, xp: 15, minLevel: 2, key: 'hire_cleaner' },
+  hire_waiter: { cost: 185, xp: 15, minLevel: 2, key: 'hire_waiter' },
+  hire_cook: { cost: 230, xp: 15, minLevel: 3, key: 'hire_cook' },
+  hire_cashier: { cost: 270, xp: 15, minLevel: 5, key: 'hire_cashier' },
 } as const;
 
 export function playerUpCost(kind: 'move' | 'carry' | 'revenue', lv: number) {
