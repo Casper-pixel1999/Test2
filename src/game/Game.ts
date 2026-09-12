@@ -77,6 +77,7 @@ export class Game {
   keys: Record<string, boolean> = Object.create(null);
   joy = { x: 0, y: 0, active: false };
   shopOpen = false;
+  _padNeedToastAt = -999;
 
   // state set in constructor (MetaSave)
   layout!: {
@@ -368,8 +369,12 @@ export class Game {
           this.completePad(def.id);
         } else {
           const need = def.cost - paid;
-          if (need > 0 && this.state.cash > 0) {
-            const pay = Math.min(this.state.cash, Math.max(8, need) * Math.min(1, dt * 2.2));
+          if (need > 0 && this.state.cash <= 0.05) {
+            if (this.time - this._padNeedToastAt >= 8) {
+              this._padNeedToastAt = this.time;
+              this.showToast(tf('padNeedMore', { n: Math.ceil(need) }));
+            }
+          } else if (need > 0 && this.state.cash > 0) {
             // continuous drain while standing
             const drain = Math.min(this.state.cash, need, Math.max(0.5, 28 * dt));
             this.state.cash -= drain;

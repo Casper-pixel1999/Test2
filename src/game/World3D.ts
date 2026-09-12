@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 import { box, cyl, makeCharacter, makePatty, makeBurgerMesh, makeSmokeParticle, makeMat } from './meshes';
-import { t, getLang } from '../i18n';
+import { t, tf, getLang } from '../i18n';
 
 export type StationKind = 'grill' | 'prep' | 'counter' | 'table' | 'trash';
 
@@ -1007,8 +1007,8 @@ export class World3D {
       }
       g.visible = p.visible;
       const costTxt = p.locked
-        ? `🔒 ${p.lockLv != null ? 'Lv' + p.lockLv : ''}`
-        : (p.cost <= 0 ? 'FREE' : (p.paid > 0 && p.paid < p.cost ? `$${p.paid}/$${p.cost}` : `$${p.cost}`));
+        ? `🔒 ${p.lockLv != null ? tf('padLockedLv', { n: p.lockLv }) : ''}`
+        : (p.cost <= 0 ? 'FREE' : (p.paid > 0 && p.paid < p.cost ? `$${Math.floor(p.paid)}/$${p.cost}` : `$${p.cost}`));
       this.updateSpriteText(g.userData.label, `${p.label}\n${costTxt}`);
       const mat = (g.userData.disc as THREE.Mesh).material as THREE.MeshBasicMaterial;
       mat.color.setHex(p.locked ? 0x666666 : (p.paid > 0 ? 0x2ecc71 : 0xf1c40f));
