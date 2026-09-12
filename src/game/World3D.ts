@@ -25,6 +25,7 @@ export interface GrillSlotVis {
   ring: THREE.Mesh;
   progress: THREE.Mesh;
   bang: THREE.Sprite;
+  pan: THREE.Mesh;
   baseScale: number;
   punchT: number;
 }
@@ -475,8 +476,10 @@ export class World3D {
     (grillTop.material as THREE.MeshStandardMaterial).metalness = 0.85;
     (grillTop.material as THREE.MeshStandardMaterial).roughness = 0.28;
     this.grillGroup.add(grillBody, grillTop);
-    for (let i = 0; i < 3; i++) {
-      const sx = -0.7 + i * 0.7;
+    // 3-slot layout matches original grill; 4th pan hidden until grill_2
+    const xsInit = [-0.7, 0, 0.7, 0.78];
+    for (let i = 0; i < 4; i++) {
+      const sx = xsInit[i];
       const pan = cyl(0.28, 0.05, 0x1a1a1c, 0.78, 12);
       (pan.material as THREE.MeshStandardMaterial).metalness = 0.8;
       (pan.material as THREE.MeshStandardMaterial).roughness = 0.3;
@@ -504,7 +507,7 @@ export class World3D {
       bang.scale.set(0.55, 0.55, 1);
       bang.visible = false;
       this.grillGroup.add(pan, patty, ring, progress, bang);
-      this.grillSlots.push({ patty, ring, progress, bang, baseScale: 1, punchT: 0 });
+      this.grillSlots.push({ patty, ring, progress, bang, pan, baseScale: 1, punchT: 0 });
     }
     const grillLabel = this.makeTextSprite('🔥 ' + t('zoneGrill'), { fontSize: 36, color: '#e8d5a3' });
     grillLabel.position.set(0, 1.6, 0);
@@ -884,9 +887,26 @@ export class World3D {
         m.emissiveIntensity = 0;
       }
     });
-    slots.forEach((s, i) => {
-      const v = this.grillSlots[i];
-      if (!v) return;
+    this.grillSlots.forEach((v, i) => {
+      const s = slots[i];
+      if (!s) {
+        v.pan.visible = false;
+        v.patty.visible = false;
+        v.ring.visible = false;
+        v.progress.visible = false;
+        v.bang.visible = false;
+        return;
+      }
+      v.pan.visible = true;
+      const xs = slots.length >= 4 ? [-0.78, -0.26, 0.26, 0.78] : [-0.7, 0, 0.7];
+      const sx = xs[i];
+      if (sx != null) {
+        v.pan.position.x = sx;
+        v.patty.position.x = sx;
+        v.ring.position.x = sx;
+        v.progress.position.x = sx;
+        v.bang.position.x = sx;
+      }
       if (v.punchT > 0) v.punchT = Math.max(0, v.punchT - dt);
       const punchScale = v.punchT > 0 ? 1 + Math.sin((1 - v.punchT / 0.35) * Math.PI) * 0.35 : 1;
       if (s.state === 'empty') {

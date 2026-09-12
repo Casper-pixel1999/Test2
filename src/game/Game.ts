@@ -110,7 +110,7 @@ export class Game {
   _softHintTarget: { x: number; z: number } | null = null;
   _softHintLife = 0;
   _approachFade = 0;
-  _prevReady: boolean[] = [false, false, false];
+  _prevReady: boolean[] = [false, false, false, false];
   _activePadKind: string | null = null;
   _toastCheese = false;
   _toastDouble = false;
@@ -162,6 +162,7 @@ export class Game {
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
           { progress: 0, state: 'empty' },
+          { progress: 0, state: 'empty' },
         ],
         interact: { x: -8.0, z: -1.5, r: 1.35 },
         solid: { x: -8.0, z: -2.8, hw: 1.35, hd: 0.95 },
@@ -192,7 +193,10 @@ export class Game {
 
   playerSpeed() { return 4.2 + this.state.speedLv * 0.55; }
   carryCap() { return 3 + this.state.capLv; }
-  grillSlotCount() { return clamp(2 + Math.floor(this.state.grillLv / 2), 2, 3); }
+  grillSlotCount() {
+    const base = clamp(2 + Math.floor(this.state.grillLv / 2), 2, 3);
+    return Math.min(4, base + (this.hasPad('grill_2') ? 1 : 0));
+  }
   isTraining() { return !this.state.tutorialDone || this.state.totalServed < 3; }
   profitMult() {
     let m = 1 + this.state.profitLv * 0.25;
@@ -453,7 +457,7 @@ export class Game {
   }
 
   openHr() {
-    if (this._hrOpen || this.shopOpen) return;
+    if (this.shopOpen) return;
     this._hrOpen = true;
     gameplayStop();
     const list = document.getElementById('hrList');
@@ -500,7 +504,7 @@ export class Game {
   }
 
   openPlayerUp() {
-    if (this._pupOpen || this.shopOpen) return;
+    if (this.shopOpen) return;
     this._pupOpen = true;
     gameplayStop();
     const list = document.getElementById('playerUpList');
@@ -961,7 +965,6 @@ export class Game {
         this.float(menuItem(prep.craft.kind).icon, this.layout.prep.x, this.layout.prep.z, '#c9a227');
         sfx.play('assemble');
         prep.craft = null;
-        if (this.tutorialStep <= 2) this.tutorialStep = 3;
       }
       return;
     }
@@ -985,7 +988,6 @@ export class Game {
     if (m.assembleSec <= 0) {
       addBurger(prep.burgers, kind);
       sfx.play('assemble');
-      if (this.tutorialStep <= 2) this.tutorialStep = 3;
     } else {
       prep.craft = { kind, t: 0, need: m.assembleSec };
     }
@@ -996,7 +998,7 @@ export class Game {
     const done = this.state.tutorialDone;
     const cookAfk = !!this.state.hasCook;
     if (!done && !inZone && !cookAfk) return;
-    const slots = this.grillSlotCount() + (this.hasPad('grill_2') ? 1 : 0);
+    const slots = this.grillSlotCount();
     if (done || cookAfk) {
       for (let i = 0; i < Math.min(slots, this.layout.grill.slots.length); i++) {
         const s = this.layout.grill.slots[i];
@@ -1481,7 +1483,7 @@ export class Game {
   }
 
   syncWorld() {
-    this.world.syncGrill(this.layout.grill.slots, this.grillCookTime(), this.time, this.dt);
+    this.world.syncGrill(this.layout.grill.slots.slice(0, this.grillSlotCount()), this.grillCookTime(), this.time, this.dt);
     this.world.syncPrep(this.layout.prep.patties, burgersToStack(this.layout.prep.burgers));
     this.world.syncCounter(burgersToStack(this.layout.counter.burgers), this.dt);
     this.world.syncTables(this.dt);
@@ -1624,7 +1626,7 @@ export class Game {
       const row = document.createElement('div');
       row.className = 'shop-item';
       const maxed = item.level >= item.max;
-      const can = !maxed && this.state.cash >= item.cost;
+      const can = !maxed && this.coreReady() && this.state.cash >= item.cost;
       const lvlLabel = item.max === 1
         ? (item.level ? t('owned') : '')
         : `${t('lvl')} ${item.level}/${item.max}`;
@@ -1638,7 +1640,7 @@ export class Game {
           ${maxed ? t('max') : `💰 ${item.cost}`}
         </button>`;
       row.querySelector('button')!.addEventListener('click', () => {
-        if (item.level >= item.max || this.state.cash < item.cost) return;
+        if (!this.coreReady() || item.level >= item.max || this.state.cash < item.cost) return;
         this.state.cash -= item.cost;
         item.buy();
         sfx.play('buy');
