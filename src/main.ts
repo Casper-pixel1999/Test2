@@ -37,6 +37,7 @@ async function boot() {
   });
   document.getElementById('btnCloseShop')?.addEventListener('click', () => game.closeShop());
   document.getElementById('btnReward')?.addEventListener('click', () => game.onReward());
+  document.getElementById('btnMute')?.addEventListener('click', () => game.toggleMute());
   document.getElementById('btnLang')?.addEventListener('click', () => {
     const next = setLang(getLang() === 'ru' ? 'en' : 'ru');
     applyStaticUI();

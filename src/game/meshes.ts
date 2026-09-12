@@ -76,7 +76,6 @@ export function makeCharacter(opts: {
   hairMesh.castShadow = true;
   g.add(hairMesh);
 
-  // eyes
   const eyeMat = makeMat(0x2c1810);
   const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), eyeMat);
   eyeL.position.set(-0.06, 1.02, 0.15);
@@ -114,25 +113,39 @@ export function makePatty(cooked: boolean) {
   return m;
 }
 
-export function makeBurgerMesh() {
+/** classic / cheese / double visual variants */
+export function makeBurgerMesh(kind: 'classic' | 'cheese' | 'double' = 'classic') {
   const g = new THREE.Group();
   const bunTop = new THREE.Mesh(
     new THREE.SphereGeometry(0.2, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.5),
-    makeMat(0xf0c27f),
+    makeMat(kind === 'cheese' ? 0xf5d08a : 0xf0c27f),
   );
-  bunTop.position.y = 0.12;
+  bunTop.position.y = kind === 'double' ? 0.2 : 0.12;
   const patty = makePatty(true);
   patty.position.y = 0.06;
   patty.scale.set(0.9, 0.8, 0.9);
-  const lettuce = box(0.34, 0.03, 0.34, 0x2ecc71, 0.08);
-  lettuce.position.y = 0.09;
+  g.add(patty);
+  if (kind === 'double') {
+    const patty2 = makePatty(true);
+    patty2.position.y = 0.13;
+    patty2.scale.set(0.9, 0.75, 0.9);
+    g.add(patty2);
+  }
+  if (kind === 'cheese') {
+    const cheese = box(0.36, 0.025, 0.36, 0xf1c40f, 0.09);
+    cheese.position.y = 0.1;
+    g.add(cheese);
+  }
+  const lettuce = box(0.34, 0.03, 0.34, kind === 'cheese' ? 0x27ae60 : 0x2ecc71, kind === 'double' ? 0.16 : 0.08);
+  lettuce.position.y = kind === 'double' ? 0.17 : 0.09;
   const bunBot = new THREE.Mesh(
     new THREE.CylinderGeometry(0.2, 0.2, 0.06, 10),
     makeMat(0xf0c27f),
   );
   bunBot.position.y = 0.03;
-  g.add(bunBot, patty, lettuce, bunTop);
+  g.add(bunBot, lettuce, bunTop);
   g.castShadow = true;
+  g.userData.kind = kind;
   return g;
 }
 

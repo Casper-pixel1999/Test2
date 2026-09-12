@@ -338,3 +338,110 @@ html, body {
 #tutorialArrow {
   z-index: 15;
 }
+
+
+/* —— Menu strip / toasts / order queue —— */
+.menu-strip {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-top: 2px;
+  pointer-events: none;
+}
+.menu-strip .ms-item {
+  background: rgba(20,10,6,.55);
+  border: 1px solid rgba(255,220,140,.28);
+  border-radius: 10px;
+  padding: 3px 8px;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.menu-strip .ms-item.locked { opacity: .35; filter: grayscale(.8); }
+
+.order-queue {
+  position: absolute;
+  top: calc(max(8px, env(safe-area-inset-top, 0px)) + 108px);
+  right: max(8px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none;
+  z-index: 11;
+  max-width: min(168px, 42vw);
+}
+.order-card {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.94);
+  color: #222;
+  border-radius: 12px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  border: 2px solid transparent;
+}
+.order-card.warn { border-color: #f1c40f; }
+.order-card.urgent {
+  border-color: #e74c3c;
+  animation: cardPulse 0.7s ease-in-out infinite;
+}
+@keyframes cardPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+.order-card .oc-ico { font-size: 1.25rem; line-height: 1; }
+.order-card .oc-name { font-weight: 800; font-size: .78rem; }
+.order-card .oc-ings { font-size: .72rem; opacity: .8; }
+.order-card .oc-bar {
+  height: 4px; border-radius: 2px; background: #ddd; margin-top: 3px; overflow: hidden;
+}
+.order-card .oc-bar > i { display: block; height: 100%; }
+
+.order-bubble.urgent {
+  box-shadow: 0 0 0 2px #e74c3c, 0 4px 12px rgba(0,0,0,.35);
+}
+
+#toastHost {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 140px);
+  transform: translateX(-50%);
+  z-index: 25;
+  pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: min(420px, 92vw);
+}
+.toast {
+  background: linear-gradient(180deg, #3a2414, #24160c);
+  border: 2px solid #f0a020;
+  color: #ffe9b0;
+  font-weight: 800;
+  font-size: 1rem;
+  padding: 10px 16px;
+  border-radius: 14px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity .35s, transform .35s;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  text-shadow: 0 1px 2px #000;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+#btnMute { min-width: 48px; height: 48px; }
+#btnShop, #btnReward, #btnLang, #btnMute {
+  min-width: 48px; min-height: 48px;
+}
+.shop-item button {
+  min-height: 48px; min-width: 80px;
+}
+#btnCloseShop { min-height: 48px; }
+
+@media (max-width: 700px) {
+  .order-queue {
+    top: calc(max(8px, env(safe-area-inset-top, 0px)) + 100px);
+    max-width: min(150px, 40vw);
+  }
+  #toastHost {
+    bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 130px);
+  }
+  /* keep joystick clear of toasts / CTAs */
+  #joystick {
+    left: max(10px, env(safe-area-inset-left, 0px));
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  }
+}

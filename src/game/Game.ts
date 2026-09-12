@@ -1,6 +1,13 @@
 import { t } from '../i18n';
 import { gameplayStart, gameplayStop, cloudSave, showRewarded, showFullscreen } from '../yandex';
 import { World3D } from './World3D';
+import { sfx } from './audio';
+import {
+  BurgerKind, BurgerCounts, MENU, MENU_ORDER, menuItem,
+  emptyBurgers, burgerSum, migrateBurgers, pickOrderKind,
+  cheeseUnlocked, doubleUnlocked, burgersToStack,
+  takeBurger, takeAnyBurgerFifo, addBurger,
+} from './menu';
 
 const SAVE_KEY = 'burger_rush_save_v1';
 const SKINS = ['#f1c27d', '#ffdeb4', '#e0ac69', '#c68642', '#8d5524'];
@@ -21,12 +28,12 @@ function patienceColor(p: number) {
 }
 
 interface GrillSlot { progress: number; state: 'empty' | 'cooking' | 'ready' }
-interface Prep { patties: number; burgers: number }
-interface Counter { burgers: number }
+interface Prep { patties: number; burgers: BurgerCounts; craft: null | { kind: BurgerKind; t: number; need: number } }
+interface Counter { burgers: BurgerCounts }
 interface Player {
   x: number; z: number;
   vx: number; vz: number;
-  patties: number; burgers: number; dirty: number;
+  patties: number; burgers: BurgerCounts; dirty: number;
   facing: number; walk: number;
 }
 interface StationSolid { x: number; z: number; hw: number; hd: number }
@@ -34,13 +41,16 @@ interface InteractPad { x: number; z: number; r: number }
 interface Worker {
   type: 'waiter' | 'cleaner';
   x: number; z: number;
-  carrying: number; task: any;
+  carrying: BurgerCounts; task: any;
   facing: number; walk: number;
 }
+type CustTrait = 'regular' | 'hurried' | 'vip';
 interface Customer {
   x: number; z: number;
   state: 'queue' | 'toTable' | 'eating' | 'leave';
-  patience: number; patienceMax: number; order: number;
+  patience: number; patienceMax: number;
+  order: BurgerKind;
+  trait: CustTrait;
   shirt: string; skin: string; hair: string; shape: number;
   table: any; eatTime: number; facing: number;
 }
@@ -85,12 +95,16 @@ export class Game {
   _shopPointOnce = false;
   _pattiesAwayT = 0;
   _burgersAwayT = 0;
+  _wrongTypeAwayT = 0;
   _lastSoftHintAt = -999;
   _softHintTarget: { x: number; z: number } | null = null;
   _softHintLife = 0;
   _approachFade = 0;
   _prevReady: boolean[] = [false, false, false];
   _activePadKind: string | null = null;
+  _toastCheese = false;
+  _toastDouble = false;
+  _mismatchHint = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.world = new World3D(canvas);
@@ -108,13 +122,16 @@ export class Game {
       tablesUnlocked: 1,
       hasWaiter: false,
       hasCleaner: false,
+      hasCheese: false,
+      hasDoubleMenu: false,
       tutorialDone: false,
       totalServed: 0,
+      seenCheeseToast: false,
+      seenDoubleToast: false,
     };
   }
 
   buildLayout() {
-    // Furniture center vs interact pad in front (player stands at pad, not inside mesh)
     this.layout = {
       grill: {
         x: -6, z: -2.5, r: 1.6,
@@ -127,12 +144,12 @@ export class Game {
         solid: { x: -6, z: -2.5, hw: 1.35, hd: 0.95 },
       },
       prep: {
-        x: -6, z: 0.9, r: 1.5, patties: 0, burgers: 0,
+        x: -6, z: 0.9, r: 1.5, patties: 0, burgers: emptyBurgers(), craft: null,
         interact: { x: -6, z: 2.1, r: 1.25 },
         solid: { x: -6, z: 0.9, hw: 1.2, hd: 0.85 },
       },
       counter: {
-        x: -2.2, z: 0.2, r: 1.8, burgers: 0,
+        x: -2.2, z: 0.2, r: 1.8, burgers: emptyBurgers(),
         interact: { x: -0.7, z: 0.2, r: 1.35 },
         solid: { x: -2.2, z: 0.2, hw: 1.5, hd: 0.7 },
       },
@@ -147,7 +164,6 @@ export class Game {
       this.layout.prep.solid,
       this.layout.counter.solid,
       this.layout.trash.solid,
-      // tables as mild solids so you walk around them
       { x: 1.2, z: 2.6, hw: 0.85, hd: 0.85 },
       { x: 3.6, z: 2.6, hw: 0.85, hd: 0.85 },
       { x: 6.0, z: 2.6, hw: 0.85, hd: 0.85 },
@@ -158,31 +174,54 @@ export class Game {
 
   playerSpeed() { return 4.2 + this.state.speedLv * 0.55; }
   carryCap() { return 3 + this.state.capLv; }
+  grillSlotCount() { return clamp(2 + Math.floor(this.state.grillLv / 2), 2, 3); }
   isTraining() { return !this.state.tutorialDone || this.state.totalServed < 3; }
   profitMult() {
     let m = 1 + this.state.profitLv * 0.25;
     if (this.time < this.doubleProfitUntil) m *= 2;
     return m;
   }
-  /** First cook ~2.4s in tutorial/training; ~3.0s base after (outside zone) */
   grillCookTime() {
     const base = this.isTraining() ? 2.4 : 3.0;
     return Math.max(1.15, base - this.state.grillLv * 0.35);
   }
-  /** First 3 orders 15×, then 12× */
-  orderPay() {
-    const base = this.state.totalServed < 3 ? 15 : 12;
-    return Math.floor(base * this.profitMult());
+  orderPay(kind: BurgerKind) {
+    let base = menuItem(kind).pay;
+    if (kind === 'classic' && this.state.totalServed < 3) base = 15;
+    return Math.floor(base * this.profitMult() * this.traitPayMult());
   }
-  /** Patience start 34s, -2s every 5 customers, floor 22s */
-  patienceStart() {
-    return Math.max(22, 34 - 2 * Math.floor(this.state.totalServed / 5));
+  traitPayMult(trait?: CustTrait) {
+    // used at pay time from customer
+    return 1;
   }
+  payForCustomer(c: Customer) {
+    let base = menuItem(c.order).pay;
+    if (c.order === 'classic' && this.state.totalServed < 3) base = 15;
+    let tm = 1;
+    if (c.trait === 'vip') tm = 1.25;
+    else if (c.trait === 'hurried') tm = 1.1;
+    return Math.floor(base * this.profitMult() * tm);
+  }
+  patienceStart(kind: BurgerKind, trait: CustTrait) {
+    let p = Math.max(22, 34 - 2 * Math.floor(this.state.totalServed / 5));
+    p += menuItem(kind).patienceBonus;
+    if (trait === 'hurried') p *= 0.65;
+    else if (trait === 'vip') p *= 1.15;
+    return p;
+  }
+  cheeseOk() { return cheeseUnlocked(this.state.totalServed, this.state.hasCheese); }
+  doubleOk() { return doubleUnlocked(this.state.totalServed, this.state.hasDoubleMenu); }
 
   load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) Object.assign(this.state, JSON.parse(raw));
+      if (raw) {
+        const data = JSON.parse(raw);
+        Object.assign(this.state, data);
+        // migrate flags
+        if (data.hasCheese == null && this.state.totalServed >= 5) this.state.hasCheese = true;
+        if (data.hasDoubleMenu == null && this.state.totalServed >= 12) this.state.hasDoubleMenu = true;
+      }
     } catch (_) {}
     this.applyUnlocks();
     if (this.state.tutorialDone) this.tutorialStep = 5;
@@ -195,12 +234,12 @@ export class Game {
     this.workers = [];
     if (this.state.hasWaiter) {
       this.workers.push({
-        type: 'waiter', x: -4, z: 0, carrying: 0, task: null, facing: 1, walk: 0,
+        type: 'waiter', x: -4, z: 0, carrying: emptyBurgers(), task: null, facing: 1, walk: 0,
       });
     }
     if (this.state.hasCleaner) {
       this.workers.push({
-        type: 'cleaner', x: 1, z: 3.5, carrying: 0, task: null, facing: 1, walk: 0,
+        type: 'cleaner', x: 1, z: 3.5, carrying: emptyBurgers(), task: null, facing: 1, walk: 0,
       });
     }
     this.world.syncTables();
@@ -218,7 +257,8 @@ export class Game {
   start() {
     this.load();
     this.player = {
-      x: -4.5, z: 0, vx: 0, vz: 0, patties: 0, burgers: 0, dirty: 0, facing: 1, walk: 0,
+      x: -4.5, z: 0, vx: 0, vz: 0,
+      patties: 0, burgers: emptyBurgers(), dirty: 0, facing: 1, walk: 0,
     };
     this.world.createPlayer();
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, 0, false);
@@ -231,6 +271,8 @@ export class Game {
     requestAnimationFrame((ts) => this.loop(ts));
     this.updateHUD();
     this.refreshShop();
+    this.syncMuteBtn();
+    this.checkUnlockToasts();
   }
 
   setPaused(p: boolean) {
@@ -245,6 +287,10 @@ export class Game {
   }
 
   bindInput() {
+    const unlockAudio = () => sfx.unlock();
+    window.addEventListener('pointerdown', unlockAudio, { once: false });
+    window.addEventListener('keydown', unlockAudio, { once: false });
+
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
       if (e.code === 'KeyE' || e.code === 'Space') {
@@ -252,6 +298,7 @@ export class Game {
         this.tryInteract();
       }
       if (e.code === 'Escape' && this.shopOpen) this.closeShop();
+      if (e.code === 'KeyM') this.toggleMute();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
 
@@ -296,6 +343,17 @@ export class Game {
     base.addEventListener('pointercancel', reset);
   }
 
+  toggleMute() {
+    sfx.toggle();
+    this.syncMuteBtn();
+    sfx.play('click');
+  }
+
+  syncMuteBtn() {
+    const btn = document.getElementById('btnMute');
+    if (btn) btn.textContent = sfx.muted ? '🔇' : '🔊';
+  }
+
   loop(ts: number) {
     if (!this.running) return;
     const dt = Math.min(0.05, (ts - this.lastTs) / 1000);
@@ -312,10 +370,12 @@ export class Game {
   update(dt: number) {
     this.updatePlayer(dt);
     this.updateGrill(dt);
+    this.updatePrepCraft(dt);
     this.updateCustomers(dt);
     this.updateWorkers(dt);
     this.updateTutorial();
     this.updateApproachPrompt();
+    this.checkUnlockToasts();
     this.world.updateSmoke(dt);
     this._saveTimer += dt;
     if (this._saveTimer > 3) {
@@ -356,7 +416,6 @@ export class Game {
       tz = (mz / len) * sp;
       if (Math.abs(mx) > 0.05) this.player.facing = mx >= 0 ? 1 : -1;
     }
-    // Smooth accel / friction (arcade-idle feel)
     const accel = len > 0.05 ? 18 : 22;
     this.player.vx = lerp(this.player.vx, tx, clamp(accel * dt, 0, 1));
     this.player.vz = lerp(this.player.vz, tz, clamp(accel * dt, 0, 1));
@@ -368,7 +427,6 @@ export class Game {
     if (moving) this.player.walk += dt * (10 + Math.hypot(this.player.vx, this.player.vz));
     else this.player.walk *= 0.88;
 
-    // No solid collision — walk-through furniture; zones gate interactions
     this.player.x = clamp(this.player.x + this.player.vx * dt, -8.8, 8.8);
     this.player.z = clamp(this.player.z + this.player.vz * dt, -5.2, 5.2);
 
@@ -379,10 +437,6 @@ export class Game {
 
   nearPad(pad: InteractPad, padExtra = 0) {
     return dist(this.player, pad) < pad.r + padExtra;
-  }
-
-  near(obj: { x: number; z: number; r?: number }, pad = 0) {
-    return dist(this.player, obj) < (obj.r ?? 1.4) + pad;
   }
 
   getFocusStation(): { x: number; z: number; kind: string; color: number } | null {
@@ -404,16 +458,45 @@ export class Game {
       if (d < bestD) { best = s; bestD = d; }
     }
     if (!best) return null;
-    if (best.kind === 'prep' && this.player.patties <= 0 && this.layout.prep.burgers <= 0) return null;
-    if (best.kind === 'counter' && this.player.burgers <= 0) return null;
+    if (best.kind === 'prep' && this.player.patties <= 0 && burgerSum(this.layout.prep.burgers) <= 0 && !this.layout.prep.craft) return null;
+    if (best.kind === 'counter' && burgerSum(this.player.burgers) <= 0) return null;
     return best;
   }
 
   inGrillZone() { return this.nearPad(this.layout.grill.interact); }
   inPrepZone() { return this.nearPad(this.layout.prep.interact); }
   inCounterZone() { return this.nearPad(this.layout.counter.interact); }
+  inTrashZone() { return this.nearPad(this.layout.trash.interact); }
   inTableZone(tb: { x: number; z: number }) {
     return dist(this.player, { x: tb.x, z: tb.z - 1.05 }) < 1.2;
+  }
+
+  pickTrait(): CustTrait {
+    if (this.isTraining()) return 'regular';
+    const r = Math.random();
+    if (this.state.totalServed >= 6 && r < 0.2) return 'vip';
+    if (r < 0.35) return 'hurried';
+    return 'regular';
+  }
+
+  /** Target recipe for prep: most impatient queued customer we can craft */
+  targetCraftKind(): BurgerKind {
+    const queued = this.customers
+      .filter((c) => c.state === 'queue')
+      .slice()
+      .sort((a, b) => a.patience - b.patience);
+    for (const c of queued) {
+      if (this.canCraft(c.order)) return c.order;
+    }
+    return 'classic';
+  }
+
+  canCraft(kind: BurgerKind): boolean {
+    const m = menuItem(kind);
+    if (m.needsCheese && !this.cheeseOk()) return false;
+    if (kind === 'double' && !this.doubleOk()) return false;
+    if (kind === 'cheese' && !this.cheeseOk()) return false;
+    return this.layout.prep.patties >= m.patties;
   }
 
   autoInteract(_dt: number) {
@@ -421,55 +504,71 @@ export class Game {
     const prep = this.layout.prep;
     const counter = this.layout.counter;
 
-    // Grill zone: start empty slots & auto-pick ready (AFK cook handled in updateGrill)
     if (this.inGrillZone()) {
-      for (const s of g.slots) {
+      const slots = this.grillSlotCount();
+      for (let i = 0; i < slots; i++) {
+        const s = g.slots[i];
         if (s.state === 'empty') {
           s.state = 'cooking';
           s.progress = 0;
           break;
         }
       }
-      for (const s of g.slots) {
+      for (let i = 0; i < slots; i++) {
+        const s = g.slots[i];
         if (s.state === 'ready' && this.player.patties < this.carryCap()) {
           s.state = 'empty';
           s.progress = 0;
           this.player.patties++;
           this.float('+🍖', this.player.x, this.player.z);
+          sfx.play('pick');
           if (this.tutorialStep <= 1) this.tutorialStep = 2;
         }
       }
     }
 
-    // Prep zone: drop patties / take burgers only while inside
     if (this.inPrepZone()) {
       if (this.player.patties > 0) {
         prep.patties += this.player.patties;
         this.player.patties = 0;
+        sfx.play('assemble');
       }
-      while (prep.patties > 0 && prep.burgers < 20) {
-        prep.patties--;
-        prep.burgers++;
-      }
-      const room = this.carryCap() - this.player.burgers;
-      if (room > 0 && prep.burgers > 0) {
-        const take = Math.min(room, prep.burgers);
-        prep.burgers -= take;
-        this.player.burgers += take;
+      // take finished burgers into hands
+      const room = this.carryCap() - burgerSum(this.player.burgers);
+      if (room > 0 && burgerSum(prep.burgers) > 0) {
+        let left = room;
+        for (const k of MENU_ORDER) {
+          while (left > 0 && prep.burgers[k] > 0) {
+            prep.burgers[k]--;
+            this.player.burgers[k]++;
+            left--;
+          }
+        }
         this.float('+🍔', this.player.x, this.player.z);
+        sfx.play('pick');
         if (this.tutorialStep <= 2) this.tutorialStep = 3;
       }
     }
 
-    // Counter zone: deposit burgers only while inside
-    if (this.inCounterZone() && this.player.burgers > 0) {
-      counter.burgers += this.player.burgers;
-      this.player.burgers = 0;
+    if (this.inCounterZone() && burgerSum(this.player.burgers) > 0) {
+      for (const k of MENU_ORDER) {
+        if (this.player.burgers[k] > 0) {
+          counter.burgers[k] += this.player.burgers[k];
+          this.player.burgers[k] = 0;
+        }
+      }
       this.float('→ 🍽️', this.player.x, this.player.z);
+      sfx.play('serve');
+      this.world.punchCounter();
       if (this.tutorialStep <= 3) this.tutorialStep = 4;
     }
 
-    // Dirty tables: clean only while in front-zone (r=1.2)
+    if (this.inTrashZone() && (this.player.patties > 0 || burgerSum(this.player.burgers) > 0)) {
+      this.player.patties = 0;
+      this.player.burgers = emptyBurgers();
+      this.float('🗑️', this.player.x, this.player.z, '#95a5a6');
+    }
+
     for (const tb of this.world.tables) {
       if (!tb.unlocked || !tb.dirty) continue;
       if (this.inTableZone(tb)) {
@@ -478,6 +577,7 @@ export class Game {
         this.float('+$3', tb.x, tb.z, '#2ecc71');
         this.world.punchTableClean(tb);
         this.float('✨', tb.x, tb.z, '#f1c40f');
+        sfx.play('clean');
         if (this.tutorialStep <= 4) {
           this.tutorialStep = 5;
           this.state.tutorialDone = true;
@@ -489,14 +589,57 @@ export class Game {
 
   tryInteract() { this.autoInteract(0); }
 
+  updatePrepCraft(dt: number) {
+    const prep = this.layout.prep;
+    if (!this.inPrepZone()) {
+      // pause craft outside zone (same station feel as grill tutorial)
+      return;
+    }
+    if (prep.craft) {
+      prep.craft.t += dt;
+      if (prep.craft.t >= prep.craft.need) {
+        addBurger(prep.burgers, prep.craft.kind);
+        this.float(menuItem(prep.craft.kind).icon, this.layout.prep.x, this.layout.prep.z, '#f1c40f');
+        sfx.play('assemble');
+        prep.craft = null;
+        if (this.tutorialStep <= 2) this.tutorialStep = 3;
+      }
+      return;
+    }
+    if (prep.patties <= 0) return;
+    const kind = this.targetCraftKind();
+    const m = menuItem(kind);
+    if (!this.canCraft(kind)) {
+      // fallback classic if possible
+      if (kind !== 'classic' && this.canCraft('classic')) {
+        prep.patties -= 1;
+        if (menuItem('classic').assembleSec <= 0) {
+          addBurger(prep.burgers, 'classic');
+          sfx.play('assemble');
+        } else {
+          prep.craft = { kind: 'classic', t: 0, need: menuItem('classic').assembleSec };
+        }
+      }
+      return;
+    }
+    prep.patties -= m.patties;
+    if (m.assembleSec <= 0) {
+      addBurger(prep.burgers, kind);
+      sfx.play('assemble');
+      if (this.tutorialStep <= 2) this.tutorialStep = 3;
+    } else {
+      prep.craft = { kind, t: 0, need: m.assembleSec };
+    }
+  }
+
   updateGrill(dt: number) {
     const inZone = this.inGrillZone();
     const done = this.state.tutorialDone;
-    // Tutorial: cook ONLY in zone. After tutorial: cook ALWAYS (AFK).
     if (!done && !inZone) return;
-    // After tutorial, keep empty slots cooking even AFK
+    const slots = this.grillSlotCount();
     if (done) {
-      for (const s of this.layout.grill.slots) {
+      for (let i = 0; i < slots; i++) {
+        const s = this.layout.grill.slots[i];
         if (s.state === 'empty') {
           s.state = 'cooking';
           s.progress = 0;
@@ -507,18 +650,28 @@ export class Game {
     const rate = (done && inZone) ? 1.35 : 1;
     const need = this.grillCookTime();
     this.layout.grill.slots.forEach((s, i) => {
+      if (i >= slots) {
+        // unused higher slots stay empty visually
+        if (s.state !== 'empty') { s.state = 'empty'; s.progress = 0; }
+        return;
+      }
       if (s.state === 'cooking') {
         s.progress += dt * rate;
         if (s.progress >= need) {
           s.state = 'ready';
           s.progress = need;
           this.world.punchGrillReady(i);
+          if (!this._prevReady[i]) {
+            sfx.play('ready');
+            this._prevReady[i] = true;
+          }
           if (this.tutorialStep === 0) this.tutorialStep = 1;
         }
+      } else if (s.state !== 'ready') {
+        this._prevReady[i] = false;
       }
     });
   }
-
 
   updateCustomers(dt: number) {
     this.spawnTimer -= dt;
@@ -526,13 +679,19 @@ export class Game {
     const waiting = this.customers.filter((c) => c.state === 'queue').length;
     const maxQueue = Math.min(4, 1 + Math.floor(this.state.tablesUnlocked / 2));
     if (this.spawnTimer <= 0 && waiting < maxQueue) {
-      // Faster early spawns so first cash ≤75s is reachable
       const baseGap = this.isTraining() ? 2.6 : 4.5;
       this.spawnTimer = Math.max(1.2, baseGap - this.state.tablesUnlocked * 0.25);
-      const pat = this.patienceStart();
+      const trait = this.pickTrait();
+      const order = pickOrderKind(
+        this.state.totalServed,
+        this.state.tutorialDone,
+        this.state.hasCheese,
+        this.state.hasDoubleMenu,
+      );
+      const pat = this.patienceStart(order, trait);
       this.customers.push({
         x: -0.6, z: 5.5, state: 'queue',
-        patience: pat, patienceMax: pat, order: 1,
+        patience: pat, patienceMax: pat, order, trait,
         shirt: `hsl(${(Math.random() * 360) | 0},62%,56%)`,
         skin: SKINS[(Math.random() * SKINS.length) | 0],
         hair: `hsl(${(Math.random() * 40 + 8) | 0},38%,${(18 + Math.random() * 22) | 0}%)`,
@@ -548,23 +707,30 @@ export class Game {
       c.patience -= dt;
     });
     const counter = this.layout.counter;
-    if (counter.burgers > 0 && queued.length) {
+    if (queued.length) {
       const c = queued[0];
       const spot0 = this.world.queueSpots[0];
-      if (dist(c, spot0) < 0.6) {
-        counter.burgers--;
+      const need = c.order;
+      const hasMatch = (counter.burgers[need] | 0) > 0;
+      if (hasMatch && dist(c, spot0) < 0.6) {
         const free = unlocked.find((tb) => !tb.customer && !tb.dirty);
         if (free) {
+          takeBurger(counter.burgers, need);
           c.state = 'toTable';
           c.table = free;
           free.customer = c;
-          const pay = this.orderPay();
+          const pay = this.payForCustomer(c);
           this.state.cash += pay;
           this.state.totalServed++;
           this.float(`+$${pay}`, free.x, free.z, '#f1c40f');
-        } else {
-          counter.burgers++;
+          this.float(menuItem(need).icon, free.x, free.z + 0.3, '#fff');
+          sfx.play('pay');
+          this.world.punchCounter();
+          this._mismatchHint = false;
         }
+      } else if (!hasMatch && burgerSum(counter.burgers) > 0) {
+        // wrong types sitting — soft hint later
+        this._mismatchHint = true;
       }
     }
     for (let i = this.customers.length - 1; i >= 0; i--) {
@@ -601,6 +767,7 @@ export class Game {
         }
       } else if (c.state === 'queue' && c.patience <= 0) {
         c.state = 'leave';
+        sfx.play('angry');
       }
     }
   }
@@ -616,22 +783,39 @@ export class Game {
     const prep = this.layout.prep;
     const counter = this.layout.counter;
     const cap = 2 + Math.floor(this.state.capLv / 2);
-    if (w.carrying <= 0) {
+    if (burgerSum(w.carrying) <= 0) {
       this.moveEntity(w, prep.x, prep.z, 3.0, dt);
       if (dist(w, prep) < 0.7) {
-        while (prep.patties > 0 && prep.burgers < 20) {
-          prep.patties--;
-          prep.burgers++;
+        // craft leftover patties into classic if idle stock
+        while (prep.patties >= 1 && burgerSum(prep.burgers) < 20 && !prep.craft) {
+          if (prep.patties >= 2 && this.doubleOk() && Math.random() < 0.2) {
+            prep.patties -= 2;
+            addBurger(prep.burgers, 'double');
+          } else if (prep.patties >= 1 && this.cheeseOk() && Math.random() < 0.3) {
+            prep.patties -= 1;
+            addBurger(prep.burgers, 'cheese');
+          } else {
+            prep.patties -= 1;
+            addBurger(prep.burgers, 'classic');
+          }
         }
-        const take = Math.min(cap, prep.burgers);
-        prep.burgers -= take;
-        w.carrying = take;
+        let left = cap - burgerSum(w.carrying);
+        while (left > 0) {
+          const k = takeAnyBurgerFifo(prep.burgers);
+          if (!k) break;
+          addBurger(w.carrying, k);
+          left--;
+        }
       }
     } else {
       this.moveEntity(w, counter.x, counter.z, 3.0, dt);
       if (dist(w, counter) < 0.7) {
-        counter.burgers += w.carrying;
-        w.carrying = 0;
+        for (const k of MENU_ORDER) {
+          if (w.carrying[k] > 0) {
+            counter.burgers[k] += w.carrying[k];
+            w.carrying[k] = 0;
+          }
+        }
       }
     }
   }
@@ -674,7 +858,6 @@ export class Game {
     const arrow = document.getElementById('tutorialArrow');
     arrow?.classList.add('hidden');
 
-    // Track step enter time for stuck detection
     if ((this as any)._lastTutStep !== this.tutorialStep) {
       (this as any)._lastTutStep = this.tutorialStep;
       this._tutorialStepAt = this.time;
@@ -682,7 +865,6 @@ export class Game {
     }
 
     if (this.state.tutorialDone || this.tutorialStep >= 5) {
-      // Once after step 5: point to shop (not mandatory)
       if (!this._shopPointOnce) {
         this._shopPointOnce = true;
         this.hintKey = 'hintUpgrade';
@@ -700,7 +882,6 @@ export class Game {
     if (this.tutorialStep === 4 && !this.world.tables.some((tb) => tb.dirty)) {
       this.hintKey = 'hintWait';
     }
-    // Stuck ≥20s: pulse target + soft "иди сюда"
     if (this.time - this._tutorialStepAt >= 20) {
       this.hintKey = 'goHere';
       this._stuckHintShown = true;
@@ -712,8 +893,16 @@ export class Game {
     const dt = this.dt;
     if (this.player.patties > 0 && !this.inPrepZone()) this._pattiesAwayT += dt;
     else this._pattiesAwayT = 0;
-    if (this.player.burgers > 0 && !this.inCounterZone()) this._burgersAwayT += dt;
+    if (burgerSum(this.player.burgers) > 0 && !this.inCounterZone()) this._burgersAwayT += dt;
     else this._burgersAwayT = 0;
+
+    // wrong type on counter while front customer waits
+    const front = this.customers.find((c) => c.state === 'queue');
+    if (front && this._mismatchHint && (this.layout.counter.burgers[front.order] | 0) <= 0) {
+      this._wrongTypeAwayT += dt;
+    } else {
+      this._wrongTypeAwayT = 0;
+    }
 
     if (this._softHintLife > 0) {
       this._softHintLife -= dt;
@@ -722,7 +911,13 @@ export class Game {
 
     if (this.time - this._lastSoftHintAt < 8) return;
 
-    if (this._pattiesAwayT > 4) {
+    if (this._wrongTypeAwayT > 4 && front) {
+      this.hintKey = 'hintNeedType';
+      this._softHintTarget = { ...this.layout.prep.interact };
+      this._softHintLife = 3.5;
+      this._lastSoftHintAt = this.time;
+      this._wrongTypeAwayT = 0;
+    } else if (this._pattiesAwayT > 4) {
       this.hintKey = 'hintStack';
       this._softHintTarget = { ...this.layout.prep.interact };
       this._softHintLife = 3.5;
@@ -735,6 +930,39 @@ export class Game {
       this._lastSoftHintAt = this.time;
       this._burgersAwayT = 0;
     }
+  }
+
+  checkUnlockToasts() {
+    if (this.cheeseOk() && !this.state.seenCheeseToast) {
+      this.state.seenCheeseToast = true;
+      this.state.hasCheese = true;
+      this.showToast(t('toastCheese'));
+      this.saveLocal();
+    }
+    if (this.doubleOk() && !this.state.seenDoubleToast) {
+      this.state.seenDoubleToast = true;
+      this.state.hasDoubleMenu = true;
+      this.showToast(t('toastDouble'));
+      this.saveLocal();
+    }
+  }
+
+  showToast(text: string) {
+    const host = document.getElementById('toastHost');
+    if (!host) {
+      this.float(text, this.player?.x ?? 0, this.player?.z ?? 0, '#ffe566');
+      return;
+    }
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    host.appendChild(el);
+    setTimeout(() => el.classList.add('show'), 20);
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 400);
+    }, 3200);
+    sfx.play('buy');
   }
 
   updateApproachPrompt() {
@@ -810,7 +1038,10 @@ export class Game {
         this.bubbleEls.set(c, el);
       }
       const ico = el.querySelector('.ico');
-      if (ico) ico.textContent = c.state === 'toTable' ? '😋' : '🍔';
+      if (ico) {
+        if (c.state === 'toTable') ico.textContent = '😋';
+        else ico.textContent = menuItem(c.order).icon;
+      }
       const bar = el.querySelector('.patience > i') as HTMLElement | null;
       if (bar) {
         const p = clamp(c.patience / (c.patienceMax || 34), 0, 1);
@@ -819,6 +1050,7 @@ export class Game {
         (el.querySelector('.patience') as HTMLElement).style.display =
           c.state === 'queue' ? 'block' : 'none';
       }
+      el.classList.toggle('urgent', c.state === 'queue' && c.patience / c.patienceMax < 0.35);
       const scr = this.world.worldToScreen(c.x, 1.9, c.z);
       el.style.left = `${scr.x}px`;
       el.style.top = `${scr.y}px`;
@@ -826,14 +1058,48 @@ export class Game {
     }
   }
 
+  syncQueueCards() {
+    const host = document.getElementById('orderQueue');
+    if (!host) return;
+    const queued = this.customers.filter((c) => c.state === 'queue').slice(0, 3);
+    host.innerHTML = '';
+    if (!queued.length) {
+      host.classList.add('hidden');
+      return;
+    }
+    host.classList.remove('hidden');
+    for (const c of queued) {
+      const m = menuItem(c.order);
+      const p = clamp(c.patience / (c.patienceMax || 34), 0, 1);
+      const card = document.createElement('div');
+      card.className = 'order-card' + (p < 0.35 ? ' urgent' : p < 0.6 ? ' warn' : '');
+      const ings = m.id === 'double'
+        ? '🍖🍖'
+        : m.id === 'cheese'
+          ? '🍖🧀'
+          : '🍖';
+      card.innerHTML = `
+        <div class="oc-ico">${m.icon}</div>
+        <div class="oc-body">
+          <div class="oc-name">${t(m.nameKey)}</div>
+          <div class="oc-ings">${ings}</div>
+          <div class="oc-bar"><i style="width:${p * 100}%;background:${patienceColor(p)}"></i></div>
+        </div>`;
+      host.appendChild(card);
+    }
+  }
+
   syncWorld() {
     this.world.syncGrill(this.layout.grill.slots, this.grillCookTime(), this.time, this.dt);
-    this.world.syncPrep(this.layout.prep.patties, this.layout.prep.burgers);
-    this.world.syncCounter(this.layout.counter.burgers);
+    this.world.syncPrep(this.layout.prep.patties, burgersToStack(this.layout.prep.burgers));
+    this.world.syncCounter(burgersToStack(this.layout.counter.burgers), this.dt);
     this.world.syncTables(this.dt);
     this.world.syncCustomers(this.customers, this.time);
-    this.world.syncWorkers(this.workers);
-    this.world.updatePlayerStack(this.player.patties, this.player.burgers);
+    this.world.syncWorkers(this.workers.map((w) => ({
+      ...w,
+      carrying: burgerSum(w.carrying),
+    })));
+    this.world.updatePlayerStack(this.player.patties, burgersToStack(this.player.burgers));
 
     const focus = this.getFocusStation();
     if (focus) this.world.setFocus(focus.x, focus.z, focus.color);
@@ -845,10 +1111,7 @@ export class Game {
     const tgt = this.tutorialTarget();
     if (tgt) {
       this.world.setTutorialTarget(tgt.x, tgt.z, this.time);
-      if (stuckPulse) {
-        // amplify focus pulse via focus ring on target
-        this.world.setFocus(tgt.x, tgt.z, 0xffe566);
-      }
+      if (stuckPulse) this.world.setFocus(tgt.x, tgt.z, 0xffe566);
     } else {
       this.world.setTutorialTarget(null, null, this.time);
     }
@@ -860,8 +1123,8 @@ export class Game {
     }
 
     this.syncBubbles();
+    this.syncQueueCards();
 
-    // float texts
     for (const f of this.floatTexts) {
       const scr = this.world.worldToScreen(f.x, f.y, f.z);
       f.el.style.left = `${scr.x}px`;
@@ -880,26 +1143,45 @@ export class Game {
     const carry = document.getElementById('carryDisplay');
     const stepEl = document.getElementById('hintStep');
     const banner = document.getElementById('hintBanner');
+    const menuStrip = document.getElementById('menuStrip');
     if (cash) {
       const bonus = this.time < this.doubleProfitUntil ? ' ✨x2' : '';
       cash.textContent = `${t('cash')} ${Math.floor(this.state.cash)}${bonus}`;
     }
     if (carry && this.player) {
       const cap = this.carryCap();
-      carry.textContent = `🍖 ${this.player.patties}/${cap}  ·  🍔 ${this.player.burgers}/${cap}`;
+      const bsum = burgerSum(this.player.burgers);
+      carry.textContent = `🍖 ${this.player.patties}/${cap}  ·  🍔 ${bsum}/${cap}`;
     }
-    if (hint) hint.textContent = t(this.hintKey);
+    if (hint) {
+      if (this.hintKey === 'hintNeedType') {
+        const front = this.customers.find((c) => c.state === 'queue');
+        const name = front ? t(menuItem(front.order).nameKey) : '';
+        hint.textContent = t('hintNeedType').replace('{type}', name);
+      } else {
+        hint.textContent = t(this.hintKey);
+      }
+    }
     if (stepEl && banner) {
       const tutoring = !this.state.tutorialDone && this.tutorialStep < 5;
       stepEl.classList.toggle('hidden', !tutoring);
       banner.classList.toggle('idle', !tutoring);
       if (tutoring) stepEl.textContent = `${t('step')} ${this.tutorialStep + 1}/5`;
     }
+    if (menuStrip) {
+      const parts: string[] = [];
+      for (const k of MENU_ORDER) {
+        const unlocked = k === 'classic' || (k === 'cheese' && this.cheeseOk()) || (k === 'double' && this.doubleOk());
+        const m = menuItem(k);
+        parts.push(`<span class="ms-item${unlocked ? '' : ' locked'}" title="${t(m.nameKey)}">${m.icon} $${m.pay}</span>`);
+      }
+      menuStrip.innerHTML = parts.join('');
+    }
   }
 
   shopItems() {
     const s = this.state;
-    return [
+    const items: any[] = [
       { id: 'speed', icon: '👟', name: t('speed'), desc: t('speedDesc'), level: s.speedLv, max: 8, cost: Math.floor(40 * Math.pow(1.55, s.speedLv)), buy: () => { s.speedLv++; } },
       { id: 'cap', icon: '🎒', name: t('capacity'), desc: t('capacityDesc'), level: s.capLv, max: 6, cost: Math.floor(50 * Math.pow(1.6, s.capLv)), buy: () => { s.capLv++; } },
       { id: 'profit', icon: '💵', name: t('profit'), desc: t('profitDesc'), level: s.profitLv, max: 10, cost: Math.floor(60 * Math.pow(1.5, s.profitLv)), buy: () => { s.profitLv++; } },
@@ -908,6 +1190,20 @@ export class Game {
       { id: 'waiter', icon: '👔', name: t('waiter'), desc: t('waiterDesc'), level: s.hasWaiter ? 1 : 0, max: 1, cost: 200, buy: () => { s.hasWaiter = true; this.applyUnlocks(); } },
       { id: 'cleaner', icon: '🧹', name: t('cleaner'), desc: t('cleanerDesc'), level: s.hasCleaner ? 1 : 0, max: 1, cost: 180, buy: () => { s.hasCleaner = true; this.applyUnlocks(); } },
     ];
+    // one-shot recipe unlocks
+    const cheeseOwned = this.cheeseOk();
+    items.push({
+      id: 'unlockCheese', icon: '🧀', name: t('unlockCheese'), desc: t('unlockCheeseDesc'),
+      level: cheeseOwned ? 1 : 0, max: 1, cost: 40,
+      buy: () => { s.hasCheese = true; this.checkUnlockToasts(); },
+    });
+    const doubleOwned = this.doubleOk();
+    items.push({
+      id: 'unlockDouble', icon: '🍔🍔', name: t('unlockDouble'), desc: t('unlockDoubleDesc'),
+      level: doubleOwned ? 1 : 0, max: 1, cost: 90,
+      buy: () => { s.hasDoubleMenu = true; this.checkUnlockToasts(); },
+    });
+    return items;
   }
 
   refreshShop() {
@@ -935,6 +1231,7 @@ export class Game {
         if (item.level >= item.max || this.state.cash < item.cost) return;
         this.state.cash -= item.cost;
         item.buy();
+        sfx.play('buy');
         this.saveLocal();
         this.refreshShop();
         this.updateHUD();
@@ -946,6 +1243,7 @@ export class Game {
   openShop() {
     this.shopOpen = true;
     gameplayStop();
+    sfx.play('click');
     this.refreshShop();
     document.getElementById('shop')?.classList.remove('hidden');
   }
@@ -954,7 +1252,6 @@ export class Game {
     this.shopOpen = false;
     document.getElementById('shop')?.classList.add('hidden');
     if (!this.paused) gameplayStart();
-    // Do not fire fullscreen interstitial during tutorial
     if (!this.state.tutorialDone) return;
     if (this.time - this._lastFsAt > 90) {
       this._lastFsAt = this.time;
@@ -967,6 +1264,7 @@ export class Game {
     if (ok) {
       this.doubleProfitUntil = this.time + 60;
       this.float(t('rewardOk'), this.player.x, this.player.z, '#f1c40f');
+      sfx.play('buy');
     } else {
       this.float(t('rewardFail'), this.player.x, this.player.z, '#e74c3c');
     }

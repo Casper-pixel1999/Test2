@@ -47,6 +47,7 @@ export class World3D {
   grillSlots: GrillSlotVis[] = [];
   prepLabel!: THREE.Sprite;
   counterStack: THREE.Group;
+  counterPunchT = 0;
   focusRing!: THREE.Mesh;
   tutorialArrow!: THREE.Group;
   softHintArrow!: THREE.Group;
@@ -577,7 +578,7 @@ export class World3D {
     }
   }
 
-  updatePlayerStack(patties: number, burgers: number) {
+  updatePlayerStack(patties: number, burgers: ('classic' | 'cheese' | 'double')[] | number) {
     while (this.playerStack.children.length) {
       this.playerStack.remove(this.playerStack.children[0]);
     }
@@ -589,12 +590,15 @@ export class World3D {
       this.playerStack.add(p);
       y += 0.12;
     }
-    for (let i = 0; i < burgers; i++) {
-      const b = makeBurgerMesh();
+    const list = Array.isArray(burgers)
+      ? burgers
+      : Array.from({ length: burgers }, () => 'classic' as const);
+    for (const kind of list) {
+      const b = makeBurgerMesh(kind);
       b.position.y = y;
       b.scale.setScalar(0.75);
       this.playerStack.add(b);
-      y += 0.22;
+      y += kind === 'double' ? 0.28 : 0.22;
     }
   }
 
@@ -642,20 +646,37 @@ export class World3D {
     });
   }
 
-  syncPrep(patties: number, burgers: number) {
-    this.updateSpriteText(this.prepLabel, `🍖${patties}  🍔${burgers}`);
+  syncPrep(patties: number, burgers: ('classic' | 'cheese' | 'double')[] | number) {
+    const n = Array.isArray(burgers) ? burgers.length : burgers;
+    const icons = Array.isArray(burgers)
+      ? burgers.slice(0, 4).map((k) => (k === 'cheese' ? '🧀' : k === 'double' ? '🍔×2' : '🍔')).join('')
+      : '🍔'.repeat(Math.min(n, 4));
+    this.updateSpriteText(this.prepLabel, `🍖${patties}  ${icons || '—'}`);
   }
 
-  syncCounter(burgers: number) {
+  punchCounter() {
+    this.counterPunchT = 0.28;
+  }
+
+  syncCounter(burgers: ('classic' | 'cheese' | 'double')[] | number, dt = 0.016) {
     while (this.counterStack.children.length) {
       this.counterStack.remove(this.counterStack.children[0]);
     }
-    const n = Math.min(burgers, 8);
-    for (let i = 0; i < n; i++) {
-      const b = makeBurgerMesh();
+    const list = Array.isArray(burgers)
+      ? burgers.slice(0, 8)
+      : Array.from({ length: Math.min(burgers, 8) }, () => 'classic' as const);
+    for (let i = 0; i < list.length; i++) {
+      const b = makeBurgerMesh(list[i]);
       b.position.y = i * 0.2;
       b.scale.setScalar(0.7);
       this.counterStack.add(b);
+    }
+    if (this.counterPunchT > 0) {
+      this.counterPunchT = Math.max(0, this.counterPunchT - dt);
+      const k = Math.sin((1 - this.counterPunchT / 0.28) * Math.PI) * 0.1;
+      this.counterStack.scale.setScalar(1 + k);
+    } else {
+      this.counterStack.scale.setScalar(1);
     }
   }
 

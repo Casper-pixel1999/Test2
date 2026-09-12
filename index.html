@@ -22,19 +22,23 @@
         <div class="cash-wrap">
           <div class="cash" id="cashDisplay">💰 0</div>
           <div class="carry" id="carryDisplay">🍖 0 · 🍔 0</div>
+          <div id="menuStrip" class="menu-strip"></div>
         </div>
         <div class="hud-actions">
           <button type="button" id="btnShop" class="btn" aria-label="Shop">🛒</button>
           <button type="button" id="btnReward" class="btn reward" title="x2">🎬 x2</button>
+          <button type="button" id="btnMute" class="btn" aria-label="Mute">🔊</button>
           <button type="button" id="btnLang" class="btn">RU</button>
         </div>
       </div>
+      <div id="orderQueue" class="order-queue hidden"></div>
       <div id="hintBanner" class="hint-banner">
         <div id="hintStep" class="hint-step"></div>
         <div id="hintText" class="hint"></div>
       </div>
       <div id="tutorialArrow" class="hidden">▼</div>
       <div id="floatLayer"></div>
+      <div id="toastHost"></div>
     </div>
 
     <div id="joystick" class="hidden">
