@@ -366,37 +366,45 @@ export class World3D {
 
 
   buildInteractPads() {
-    const pads: { x: number; z: number; color: number }[] = [
-      { x: -6, z: -0.85, color: 0xff6b35 },
-      { x: -6, z: 2.35, color: 0xf1c40f },
-      { x: -2.2, z: 1.85, color: 0x2ecc71 },
+    type Pad = { x: number; z: number; color: number; r?: number };
+    const pads: Pad[] = [
+      { x: -6, z: -0.85, color: 0xff6b35 },       // grill
+      { x: -6, z: 2.35, color: 0xf1c40f },        // prep / assembly
+      { x: -2.2, z: 1.85, color: 0x2ecc71 },      // serve counter
+      { x: -7.2, z: 3.2, color: 0xf1c40f, r: 0.85 }, // trash
     ];
+    // One pad in front of every dining table
+    for (const tb of this.tables) {
+      pads.push({ x: tb.x, z: tb.z - 0.95, color: 0x5dade2, r: 0.9 });
+    }
     for (const p of pads) {
+      const outer = p.r ?? 0.95;
+      const inner = outer * 0.55;
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.55, 0.95, 32),
+        new THREE.RingGeometry(inner, outer, 32),
         new THREE.MeshBasicMaterial({
           color: p.color,
           transparent: true,
-          opacity: 0.45,
+          opacity: 0.5,
           side: THREE.DoubleSide,
           depthWrite: false,
         }),
       );
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(p.x, 0.04, p.z);
+      ring.position.set(p.x, 0.045, p.z);
       this.root.add(ring);
       const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(0.5, 24),
+        new THREE.CircleGeometry(inner * 0.95, 24),
         new THREE.MeshBasicMaterial({
           color: p.color,
           transparent: true,
-          opacity: 0.18,
+          opacity: 0.2,
           side: THREE.DoubleSide,
           depthWrite: false,
         }),
       );
       disc.rotation.x = -Math.PI / 2;
-      disc.position.set(p.x, 0.035, p.z);
+      disc.position.set(p.x, 0.04, p.z);
       this.root.add(disc);
     }
   }

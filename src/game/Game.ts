@@ -367,7 +367,7 @@ export class Game {
     for (const tb of this.world.tables) {
       if (tb.unlocked && tb.dirty) {
         // stand in front of table (slightly toward kitchen / -z)
-        list.push({ x: tb.x, z: tb.z - 0.95, r: 1.15, kind: 'table', color: 0xe67e22 });
+        list.push({ x: tb.x, z: tb.z - 0.95, r: 1.05, kind: 'table', color: 0x5dade2 });
       }
     }
     let best: typeof list[0] | null = null;
@@ -387,7 +387,7 @@ export class Game {
   inPrepZone() { return this.nearPad(this.layout.prep.interact); }
   inCounterZone() { return this.nearPad(this.layout.counter.interact); }
   inTableZone(tb: { x: number; z: number }) {
-    return dist(this.player, { x: tb.x, z: tb.z - 0.95 }) < 1.15;
+    return dist(this.player, { x: tb.x, z: tb.z - 0.95 }) < 1.05;
   }
 
   autoInteract(_dt: number) {
