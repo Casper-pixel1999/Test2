@@ -1,5 +1,5 @@
 import { t, getLang } from './i18n.js';
-import { gameplayStart, gameplayStop, cloudSave, showRewarded } from './yandex.js';
+import { gameplayStart, gameplayStop, cloudSave, showRewarded, showFullscreen } from './yandex.js';
 
 const SAVE_KEY = 'burger_rush_save_v1';
 const WORLD_W = 960;
@@ -54,6 +54,7 @@ export class Game {
     this.spawnTimer = 0;
     this.hintKey = 'hintCook';
     this._saveTimer = 0;
+    this._lastFsAt = -999;
     this._cloudTimer = 0;
 
     this.bindInput();
@@ -270,6 +271,7 @@ export class Game {
     this._saveTimer += dt;
     if (this._saveTimer > 3) {
       this._saveTimer = 0;
+    this._lastFsAt = -999;
       this.saveLocal();
     }
     this._cloudTimer += dt;
@@ -666,13 +668,20 @@ export class Game {
 
   openShop() {
     this.shopOpen = true;
+    gameplayStop();
     this.refreshShop();
     document.getElementById('shop')?.classList.remove('hidden');
   }
 
-  closeShop() {
+  async closeShop() {
     this.shopOpen = false;
     document.getElementById('shop')?.classList.add('hidden');
+    if (!this.paused) gameplayStart();
+    // Fullscreen interstitial in a logical pause (Yandex 1.12 monetization)
+    if (this.time - this._lastFsAt > 90) {
+      this._lastFsAt = this.time;
+      await showFullscreen();
+    }
   }
 
   async onReward() {

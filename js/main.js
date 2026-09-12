@@ -12,6 +12,13 @@ function setProgress(p, text) {
 }
 
 async function boot() {
+
+  // Yandex Games: no browser context menu / text selection in play area
+  const blockCtx = (e) => e.preventDefault();
+  document.addEventListener('contextmenu', blockCtx);
+  document.addEventListener('selectstart', blockCtx);
+  document.getElementById('app')?.addEventListener('contextmenu', blockCtx);
+
   setProgress(0.15, 'SDK…');
   const { mocked } = await initYandex();
   const lang = detectLang(navigator.language || 'ru');

@@ -55,6 +55,15 @@ function createMockSdk() {
           }, 400);
         }, 200);
       },
+      showFullscreenAdv({ callbacks }) {
+        console.log('[mock] fullscreen adv');
+        setTimeout(() => {
+          callbacks && callbacks.onOpen && callbacks.onOpen();
+          setTimeout(() => {
+            callbacks && callbacks.onClose && callbacks.onClose(true);
+          }, 300);
+        }, 100);
+      },
     },
     getPlayer() {
       return Promise.resolve({
@@ -103,6 +112,34 @@ export function detectLang(fallback = 'ru') {
     if (l) return l;
   } catch (_) {}
   return fallback;
+}
+
+
+export function showFullscreen() {
+  return new Promise((resolve) => {
+    if (!ysdk?.adv?.showFullscreenAdv) {
+      resolve(false);
+      return;
+    }
+    try {
+      ysdk.adv.showFullscreenAdv({
+        callbacks: {
+          onOpen() { gameplayStop(); },
+          onClose(wasShown) {
+            gameplayStart();
+            resolve(!!wasShown);
+          },
+          onError() {
+            gameplayStart();
+            resolve(false);
+          },
+        },
+      });
+    } catch (_) {
+      gameplayStart();
+      resolve(false);
+    }
+  });
 }
 
 export function showRewarded() {
