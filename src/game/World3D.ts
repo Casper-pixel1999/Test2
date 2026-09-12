@@ -105,6 +105,12 @@ export class World3D {
   hrFloor!: THREE.Mesh;
   playerUpFloor!: THREE.Mesh;
   streetSpawn = { x: 3, z: -8.5 };
+  wingUse: {
+    driveReady: THREE.Sprite | null;
+    restDirty: THREE.Mesh | null;
+    restLabel: THREE.Sprite | null;
+    stockReady: THREE.Sprite | null;
+  } = { driveReady: null, restDirty: null, restLabel: null, stockReady: null };
   floorCoins: { mesh: THREE.Mesh; x: number; z: number; value: number }[] = [];
 
 
@@ -465,6 +471,7 @@ export class World3D {
     // wingB east of continuous right wall
     mkWingBox('wingB', 3.4, 5.0, xR + 1.7 + woodT / 2, wingBDoor.cz, 0xa89880, 'w');
 
+    this.dressWingRooms();
     this.addPlant(10.8, -3.2);
     this.addPlant(-0.2, 5.2);
 
@@ -481,7 +488,102 @@ export class World3D {
   }
 
 
+  /** Props + 1-use markers so opened wings are not empty geo. */
+  dressWingRooms() {
+    const addTo = (id: string, obj: THREE.Object3D) => {
+      const g = this.zoneRooms[id];
+      if (g) g.add(obj);
+    };
+
+    // Drive-thru window counter (north end of room)
+    {
+      const counter = box(2.4, 0.88, 0.62, 0x4a4036, 0);
+      counter.position.set(9.6, 0, -9.55);
+      addTo('driveThru', counter);
+      const ledge = box(2.2, 0.08, 0.7, 0x6e5a48, 0.88);
+      ledge.position.set(9.6, 0, -9.5);
+      addTo('driveThru', ledge);
+      const board = box(1.35, 0.72, 0.08, 0x2a2420, 1.15);
+      board.position.set(9.6, 0, -9.88);
+      addTo('driveThru', board);
+      const lbl = this.makeTextSprite('🚗 ' + t('zoneDriveThru'), { fontSize: 32, color: '#d4c4ae' });
+      lbl.position.set(9.6, 1.85, -8.4);
+      lbl.scale.set(2.0, 0.45, 1);
+      addTo('driveThru', lbl);
+      const ready = this.makeTextSprite(t('readyLabel'), { fontSize: 34, color: '#c9a227' });
+      ready.position.set(9.6, 1.45, -8.55);
+      ready.scale.set(1.5, 0.4, 1);
+      ready.visible = false;
+      addTo('driveThru', ready);
+      this.wingUse.driveReady = ready;
+    }
+
+    // Restroom stall + sink
+    {
+      const stall = box(1.15, 1.35, 0.08, 0xc5cecb, 0);
+      stall.position.set(0.5, 0, -9.7);
+      addTo('restroom', stall);
+      const bowl = cyl(0.22, 0.32, 0xe8eeec, 0, 10);
+      bowl.position.set(0.5, 0, -9.35);
+      addTo('restroom', bowl);
+      const tank = box(0.38, 0.42, 0.16, 0xdde4e2, 0.32);
+      tank.position.set(0.5, 0, -9.55);
+      addTo('restroom', tank);
+      const sink = box(0.7, 0.12, 0.42, 0xd8e0de, 0.82);
+      sink.position.set(-0.35, 0, -7.9);
+      addTo('restroom', sink);
+      const pedestal = box(0.22, 0.82, 0.22, 0xc8d0ce, 0);
+      pedestal.position.set(-0.35, 0, -7.9);
+      addTo('restroom', pedestal);
+      const lbl = this.makeTextSprite('🚻 ' + t('zoneRestroom'), { fontSize: 30, color: '#c5cecb' });
+      lbl.position.set(0.5, 1.85, -7.6);
+      lbl.scale.set(2.0, 0.45, 1);
+      addTo('restroom', lbl);
+      const puddle = box(1.05, 0.04, 0.85, 0x4a5a48, 0.08);
+      puddle.position.set(0.5, 0, -7.35);
+      const pm = puddle.material as THREE.MeshStandardMaterial;
+      pm.transparent = true;
+      pm.opacity = 0.45;
+      puddle.visible = false;
+      addTo('restroom', puddle);
+      const dirty = this.makeTextSprite('🤢 ' + t('dirtyLabel'), { fontSize: 32, color: '#ffcc88' });
+      dirty.position.set(0.5, 1.4, -7.35);
+      dirty.scale.set(1.7, 0.42, 1);
+      dirty.visible = false;
+      addTo('restroom', dirty);
+      this.wingUse.restDirty = puddle;
+      this.wingUse.restLabel = dirty;
+    }
+
+    // Storage crates / shelf
+    {
+      const shelf = box(1.6, 1.15, 0.38, 0x6b5340, 0);
+      shelf.position.set(-14.6, 0, -3.6);
+      addTo('storage', shelf);
+      const crateA = box(0.85, 0.62, 0.7, 0x8a6a40, 0);
+      crateA.position.set(-13.7, 0, -2.15);
+      addTo('storage', crateA);
+      const crateB = box(0.7, 0.48, 0.62, 0x7a5c38, 0);
+      crateB.position.set(-14.3, 0, -1.4);
+      addTo('storage', crateB);
+      const crateC = box(0.55, 0.4, 0.5, 0x9a7a50, 0.62);
+      crateC.position.set(-13.7, 0, -2.15);
+      addTo('storage', crateC);
+      const lbl = this.makeTextSprite('📦 ' + t('zoneStorage'), { fontSize: 30, color: '#d4c4ae' });
+      lbl.position.set(-13.7, 1.7, -2.5);
+      lbl.scale.set(1.9, 0.42, 1);
+      addTo('storage', lbl);
+      const ready = this.makeTextSprite(t('readyLabel'), { fontSize: 32, color: '#c9a227' });
+      ready.position.set(-13.7, 1.35, -2.5);
+      ready.scale.set(1.4, 0.38, 1);
+      ready.visible = false;
+      addTo('storage', ready);
+      this.wingUse.stockReady = ready;
+    }
+  }
+
   addPlant(x: number, z: number) {
+
     const pot = cyl(0.22, 0.28, 0x5d3a1a, 0, 8);
     pot.position.set(x, 0, z);
     const leaf1 = cyl(0.16, 0.5, 0x5a8f6b, 0.28, 6);
@@ -711,6 +813,9 @@ export class World3D {
       { x: -8.0, z: 3.1, color: 0xc9a227, kind: 'prep' },
       { x: -3.7, z: 0.0, color: 0x5a8f6b, kind: 'counter' },
       { x: -11.0, z: 3.5, color: 0xa89070, r: 0.9, kind: 'trash' },
+      { x: 9.6, z: -7.55, color: 0x6e746c, r: 1.05, kind: 'driveThru' },
+      { x: 0.5, z: -7.35, color: 0x8aa8a4, r: 1.0, kind: 'restroom' },
+      { x: -13.7, z: -2.5, color: 0xa89070, r: 1.05, kind: 'storage' },
     ];
     this.tables.forEach((tb, i) => {
       pads.push({ x: tb.x, z: tb.z - 1.05, color: 0xa89070, r: 1.15, kind: `table-${i}` });
@@ -755,6 +860,10 @@ export class World3D {
         discMat: matDisc,
         baseOuter: outer,
       });
+      if (p.kind === 'driveThru' || p.kind === 'restroom' || p.kind === 'storage') {
+        ring.visible = false;
+        disc.visible = false;
+      }
     }
   }
 
@@ -820,7 +929,7 @@ export class World3D {
     tb.cleanPunchT = 0.28;
   }
 
-  mapBounds = { minX: -11.5, maxX: 11.5, minZ: -9.5, maxZ: 5.5 };
+  mapBounds = { minX: -15.0, maxX: 15.0, minZ: -10.8, maxZ: 5.5 };
 
   followCamera(px: number, pz: number, dt: number) {
     const bx = Math.max(this.mapBounds.minX + 2, Math.min(this.mapBounds.maxX - 2, px));
@@ -1276,6 +1385,27 @@ export class World3D {
     if (b) b.visible = !open;
     const r = this.zoneRooms[id];
     if (r) r.visible = open;
+    if (id === 'driveThru' || id === 'restroom' || id === 'storage') {
+      this.setInteractPadVisible(id, open);
+    }
+  }
+
+  setInteractPadVisible(kind: string, vis: boolean) {
+    for (const p of this.interactPads) {
+      if (p.kind === kind) {
+        p.ring.visible = vis;
+        p.disc.visible = vis;
+      }
+    }
+  }
+
+  setWingUseReady(kind: 'driveThru' | 'restroom' | 'storage', ready: boolean) {
+    if (kind === 'driveThru' && this.wingUse.driveReady) this.wingUse.driveReady.visible = ready;
+    if (kind === 'storage' && this.wingUse.stockReady) this.wingUse.stockReady.visible = ready;
+    if (kind === 'restroom') {
+      if (this.wingUse.restDirty) this.wingUse.restDirty.visible = ready;
+      if (this.wingUse.restLabel) this.wingUse.restLabel.visible = ready;
+    }
   }
 
   setStationBuilt(kind: 'grill' | 'prep' | 'counter' | 'trash', built: boolean) {

@@ -104,6 +104,9 @@ const STRINGS: Record<string, Record<string, string>> = {
     offlineX2: 'x2 за рекламу',
     zoneHr: 'HR',
     zonePlayerUp: 'ПРОКАЧКА',
+    zoneDriveThru: 'ОКНО',
+    zoneRestroom: 'ТУАЛЕТ',
+    zoneStorage: 'СКЛАД',
   },
   en: {
     loading: 'Loading…',
@@ -209,6 +212,9 @@ const STRINGS: Record<string, Record<string, string>> = {
     offlineX2: 'x2 with ad',
     zoneHr: 'HR',
     zonePlayerUp: 'UPGRADES',
+    zoneDriveThru: 'WINDOW',
+    zoneRestroom: 'RESTROOM',
+    zoneStorage: 'STORAGE',
   },
 };
 

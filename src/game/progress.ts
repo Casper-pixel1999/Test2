@@ -27,7 +27,7 @@ export interface MissionDef {
   labelKey: string;
 }
 
-export const MAP = { minX: -12, maxX: 12, minZ: -10, maxZ: 6 };
+export const MAP = { minX: -15.5, maxX: 15.5, minZ: -11, maxZ: 6 };
 
 /** restLv cum XP: 1:0 2:40 3:90 4:150 5:230 6:330 7:450 8:590 9:760 10:950 */
 export const XP_CUM = [0, 40, 90, 150, 230, 330, 450, 590, 760, 950];

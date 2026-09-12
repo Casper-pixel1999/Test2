@@ -125,6 +125,13 @@ export class Game {
   _hrConsumed = false;
   _pupConsumed = false;
   _offlineCash = 0;
+  _wingCd = { driveThru: 0, restroom: 0, storage: 0 };
+  restroomDirty = false;
+  wingPads = {
+    driveThru: { x: 9.6, z: -7.55, r: 1.2 },
+    restroom: { x: 0.5, z: -7.35, r: 1.15 },
+    storage: { x: -13.7, z: -2.5, r: 1.2 },
+  };
   state!: MetaSave;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -753,6 +760,7 @@ export class Game {
     if (this.hasPad('grill_1')) this.updatePrepCraft(dt);
     if (this.coreReady()) this.updateCustomers(dt);
     this.updateWorkers(dt);
+    this.updateWings(dt);
     this.updateTutorial();
     this.updateApproachPrompt();
     this.checkUnlockToasts();
@@ -809,13 +817,24 @@ export class Game {
 
     let nx = this.player.x + this.player.vx * dt;
     let nz = this.player.z + this.player.vz * dt;
-    // map bounds; block locked wings roughly
+    // map bounds; block locked wings roughly (open rooms stay walkable)
     nx = clamp(nx, MAP.minX + 0.6, MAP.maxX - 0.6);
     nz = clamp(nz, MAP.minZ + 0.6, MAP.maxZ - 0.6);
-    if (!this.state.openZones.includes('street') && !this.state.openZones.includes('hr') && !this.state.openZones.includes('playerUp')) {
-      nz = Math.max(nz, -4.6);
-    } else if (!this.state.openZones.includes('street') && nz < -5.0 && nx > -2 && nx < 8) {
-      nz = Math.max(nz, -4.6);
+    const zopen = (id: string) => this.state.openZones.includes(id);
+    if (nz < -4.65) {
+      const ok =
+        (nx < -6.2 && zopen('hr'))
+        || (nx >= -6.2 && nx < -1.8 && zopen('playerUp'))
+        || (nx >= -1.8 && nx < 2.0 && zopen('restroom'))
+        || (nx >= 2.0 && nx < 7.4 && zopen('street'))
+        || (nx >= 7.4 && zopen('driveThru'));
+      if (!ok) nz = -4.65;
+    }
+    if (nx < -11.45) {
+      if (!(zopen('storage') && Math.abs(nz + 2.5) < 2.1)) nx = -11.45;
+    }
+    if (nx > 11.45) {
+      if (!(zopen('wingB') && Math.abs(nz - 1.5) < 2.4)) nx = 11.45;
     }
     this.player.x = nx;
     this.player.z = nz;
@@ -836,6 +855,15 @@ export class Game {
       { ...this.layout.prep.interact, kind: 'prep', color: 0xc9a227 },
       { ...this.layout.counter.interact, kind: 'counter', color: 0x5a8f6b },
     ];
+    if (this.hasPad('drive_thru') && this._wingCd.driveThru <= 0) {
+      list.push({ ...this.wingPads.driveThru, kind: 'driveThru', color: 0x6e746c });
+    }
+    if (this.hasPad('expand_restroom') && this.restroomDirty) {
+      list.push({ ...this.wingPads.restroom, kind: 'restroom', color: 0x8aa8a4 });
+    }
+    if (this.hasPad('expand_storage') && this._wingCd.storage <= 0) {
+      list.push({ ...this.wingPads.storage, kind: 'storage', color: 0xa89070 });
+    }
     for (const tb of this.world.tables) {
       if (tb.unlocked && tb.dirty) {
         list.push({ x: tb.x, z: tb.z - 1.05, r: 1.2, kind: 'table', color: 0xa89070 });
@@ -961,6 +989,8 @@ export class Game {
       this.float('🗑️', this.player.x, this.player.z, '#95a5a6');
     }
 
+    this.tryWingInteracts();
+
     for (const tb of this.world.tables) {
       if (!tb.unlocked || !tb.dirty) continue;
       if (this.inTableZone(tb)) {
@@ -979,6 +1009,75 @@ export class Game {
           this._shopPointOnce = false;
         }
       }
+    }
+  }
+
+  updateWings(dt: number) {
+    if (this.hasPad('drive_thru')) {
+      this._wingCd.driveThru = Math.max(0, this._wingCd.driveThru - dt);
+      this.world.setWingUseReady('driveThru', this._wingCd.driveThru <= 0);
+    } else {
+      this.world.setWingUseReady('driveThru', false);
+    }
+    if (this.hasPad('expand_storage')) {
+      this._wingCd.storage = Math.max(0, this._wingCd.storage - dt);
+      this.world.setWingUseReady('storage', this._wingCd.storage <= 0);
+    } else {
+      this.world.setWingUseReady('storage', false);
+    }
+    if (this.hasPad('expand_restroom')) {
+      if (!this.restroomDirty) {
+        this._wingCd.restroom += dt;
+        if (this._wingCd.restroom >= 26) {
+          this.restroomDirty = true;
+          this._wingCd.restroom = 0;
+        }
+      }
+      this.world.setWingUseReady('restroom', this.restroomDirty);
+    } else {
+      this.world.setWingUseReady('restroom', false);
+    }
+  }
+
+  grantWing(cash: number, xp: number, kind?: 'serve' | 'clean') {
+    this.state.cash += cash;
+    this.state.sessionEarned += cash;
+    this.addXP(xp);
+    if (kind === 'serve') {
+      this.state.totalServed++;
+      this.bumpMission('serve', 1);
+    }
+    if (kind === 'clean') {
+      this.state.totalCleaned++;
+      this.bumpMission('clean', 1);
+    }
+    this.syncMissionEarn();
+    this.float(`+$${cash}`, this.player.x, this.player.z, '#5a8f6b');
+    sfx.play(kind === 'clean' ? 'clean' : 'pay');
+  }
+
+  tryWingInteracts() {
+    if (this.hasPad('drive_thru') && this.nearPad(this.wingPads.driveThru) && this._wingCd.driveThru <= 0) {
+      const handed = takeAnyBurgerFifo(this.player.burgers);
+      if (handed) {
+        this.grantWing(this.orderPay(handed), 4, 'serve');
+        this._wingCd.driveThru = 12;
+      } else {
+        this.grantWing(8, 2);
+        this._wingCd.driveThru = 20;
+      }
+      this.world.setWingUseReady('driveThru', false);
+    }
+    if (this.hasPad('expand_restroom') && this.restroomDirty && this.nearPad(this.wingPads.restroom)) {
+      this.restroomDirty = false;
+      this._wingCd.restroom = 0;
+      this.grantWing(6, 2, 'clean');
+      this.world.setWingUseReady('restroom', false);
+    }
+    if (this.hasPad('expand_storage') && this.nearPad(this.wingPads.storage) && this._wingCd.storage <= 0) {
+      this.grantWing(5, 2);
+      this._wingCd.storage = 22;
+      this.world.setWingUseReady('storage', false);
     }
   }
 
@@ -1466,6 +1565,15 @@ export class Game {
       { ...this.layout.prep.interact, kind: 'prep' },
       { ...this.layout.counter.interact, kind: 'counter' },
     ];
+    if (this.hasPad('drive_thru') && this._wingCd.driveThru <= 0) {
+      pads.push({ ...this.wingPads.driveThru, kind: 'driveThru' });
+    }
+    if (this.hasPad('expand_restroom') && this.restroomDirty) {
+      pads.push({ ...this.wingPads.restroom, kind: 'restroom' });
+    }
+    if (this.hasPad('expand_storage') && this._wingCd.storage <= 0) {
+      pads.push({ ...this.wingPads.storage, kind: 'storage' });
+    }
     this.world.tables.forEach((tb, i) => {
       if (tb.unlocked && tb.dirty) {
         pads.push({ x: tb.x, z: tb.z - 1.05, r: 1.2, kind: `table-${i}` });
@@ -1700,9 +1808,7 @@ export class Game {
   shopItems() {
     const s = this.state;
     const items: any[] = [
-      { id: 'speed', icon: '👟', name: t('speed'), desc: t('speedDesc'), level: s.speedLv, max: 8, cost: Math.floor(40 * Math.pow(1.55, s.speedLv)), buy: () => { s.speedLv++; } },
-      { id: 'cap', icon: '🎒', name: t('capacity'), desc: t('capacityDesc'), level: s.capLv, max: 6, cost: Math.floor(50 * Math.pow(1.6, s.capLv)), buy: () => { s.capLv++; } },
-      { id: 'profit', icon: '💵', name: t('profit'), desc: t('profitDesc'), level: s.profitLv, max: 10, cost: Math.floor(60 * Math.pow(1.5, s.profitLv)), buy: () => { s.profitLv++; } },
+      // speed/cap/profit live in PlayerUp room only — no shop duplicates
       { id: 'grill', icon: '🔥', name: t('grillSpeed'), desc: t('grillSpeedDesc'), level: s.grillLv, max: 6, cost: Math.floor(45 * Math.pow(1.55, s.grillLv)), buy: () => { s.grillLv++; } },
       { id: 'table', icon: '🪑', name: t('table'), desc: t('tableDesc'), level: s.tablesUnlocked, max: this.world.tables.length, cost: Math.floor(80 * Math.pow(1.45, s.tablesUnlocked - 1)), buy: () => { s.tablesUnlocked++; this.applyUnlocks(); } },
       // Hiring lives in HR room only (HR_HIRE / §11) — not shop
