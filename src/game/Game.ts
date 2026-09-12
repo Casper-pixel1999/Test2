@@ -120,6 +120,8 @@ export class Game {
   _pupNear = 0;
   _hrOpen = false;
   _pupOpen = false;
+  _hrConsumed = false;
+  _pupConsumed = false;
   _offlineCash = 0;
   state!: MetaSave;
 
@@ -413,15 +415,30 @@ export class Game {
     }
     this.world.syncBuildPads(vis);
 
-    // HR / Player room proximity open
-    if (this.state.openZones.includes('hr') && this.player && dist(this.player, { x: -8.5, z: -7.0 }) < 1.4) {
-      this._hrNear = (this._hrNear || 0) + dt;
-      if (this._hrNear > 0.35 && !this._hrOpen) this.openHr();
-    } else this._hrNear = 0;
-    if (this.state.openZones.includes('playerUp') && this.player && dist(this.player, { x: -4.0, z: -7.0 }) < 1.4) {
-      this._pupNear = (this._pupNear || 0) + dt;
-      if (this._pupNear > 0.35 && !this._pupOpen) this.openPlayerUp();
-    } else this._pupNear = 0;
+    // HR / Player room proximity open — center on wing floor mesh (slight left for HR)
+    const hrP = this.world.hrFloor.position;
+    const pupP = this.world.playerUpFloor.position;
+    const hrCenter = { x: hrP.x - 0.2, z: hrP.z };
+    const pupCenter = { x: pupP.x, z: pupP.z };
+    const zoneR = 1.2;
+    if (this.state.openZones.includes('hr') && this.player && dist(this.player, hrCenter) < zoneR) {
+      if (!this._hrConsumed) {
+        this._hrNear = (this._hrNear || 0) + dt;
+        if (this._hrNear > 0.35 && !this._hrOpen) this.openHr();
+      }
+    } else {
+      this._hrNear = 0;
+      this._hrConsumed = false;
+    }
+    if (this.state.openZones.includes('playerUp') && this.player && dist(this.player, pupCenter) < zoneR) {
+      if (!this._pupConsumed) {
+        this._pupNear = (this._pupNear || 0) + dt;
+        if (this._pupNear > 0.35 && !this._pupOpen) this.openPlayerUp();
+      }
+    } else {
+      this._pupNear = 0;
+      this._pupConsumed = false;
+    }
   }
 
   bumpMission(kind: string, amount: number) {
@@ -500,8 +517,9 @@ export class Game {
 
   closeHr() {
     this._hrOpen = false;
+    this._hrConsumed = true;
     document.getElementById('hrModal')?.classList.add('hidden');
-    if (!this.paused && !this.shopOpen) gameplayStart();
+    if (!this.paused && !this.shopOpen && !this._pupOpen) gameplayStart();
   }
 
   openPlayerUp() {
@@ -542,8 +560,9 @@ export class Game {
 
   closePlayerUp() {
     this._pupOpen = false;
+    this._pupConsumed = true;
     document.getElementById('playerUpModal')?.classList.add('hidden');
-    if (!this.paused && !this.shopOpen) gameplayStart();
+    if (!this.paused && !this.shopOpen && !this._hrOpen) gameplayStart();
   }
 
   maybeOfflineEarn() {
@@ -638,7 +657,11 @@ export class Game {
         e.preventDefault();
         this.tryInteract();
       }
-      if (e.code === 'Escape' && this.shopOpen) this.closeShop();
+      if (e.code === 'Escape') {
+        if (this.shopOpen) this.closeShop();
+        else if (this._hrOpen) this.closeHr();
+        else if (this._pupOpen) this.closePlayerUp();
+      }
       if (e.code === 'KeyM') this.toggleMute();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
@@ -1618,8 +1641,7 @@ export class Game {
       { id: 'profit', icon: '💵', name: t('profit'), desc: t('profitDesc'), level: s.profitLv, max: 10, cost: Math.floor(60 * Math.pow(1.5, s.profitLv)), buy: () => { s.profitLv++; } },
       { id: 'grill', icon: '🔥', name: t('grillSpeed'), desc: t('grillSpeedDesc'), level: s.grillLv, max: 6, cost: Math.floor(45 * Math.pow(1.55, s.grillLv)), buy: () => { s.grillLv++; } },
       { id: 'table', icon: '🪑', name: t('table'), desc: t('tableDesc'), level: s.tablesUnlocked, max: this.world.tables.length, cost: Math.floor(80 * Math.pow(1.45, s.tablesUnlocked - 1)), buy: () => { s.tablesUnlocked++; this.applyUnlocks(); } },
-      { id: 'waiter', icon: '👔', name: t('waiter'), desc: t('waiterDesc'), level: s.hasWaiter ? 1 : 0, max: 1, cost: 200, buy: () => { s.hasWaiter = true; this.applyUnlocks(); } },
-      { id: 'cleaner', icon: '🧹', name: t('cleaner'), desc: t('cleanerDesc'), level: s.hasCleaner ? 1 : 0, max: 1, cost: 180, buy: () => { s.hasCleaner = true; this.applyUnlocks(); } },
+      // Hiring lives in HR room only (HR_HIRE / §11) — not shop
     ];
     // one-shot recipe unlocks
     const cheeseOwned = this.cheeseOk();
@@ -1683,7 +1705,7 @@ export class Game {
     this.shopOpen = false;
     document.getElementById('shop')?.classList.add('hidden');
     if (!this.state.tutorialDone) {
-      if (!this.paused) gameplayStart();
+      if (!this.paused && !this._hrOpen && !this._pupOpen) gameplayStart();
       return;
     }
     if (this.time - this._lastFsAt > 90) {
@@ -1691,7 +1713,7 @@ export class Game {
       this.setPaused(true);
       await showFullscreen();
       this.setPaused(false);
-    } else if (!this.paused) {
+    } else if (!this.paused && !this._hrOpen && !this._pupOpen) {
       gameplayStart();
     }
   }
