@@ -73,6 +73,7 @@ export class World3D {
   buildPadRoot!: THREE.Group;
   buildPadMeshes = new Map<string, THREE.Group>();
   zoneBarriers: Record<string, THREE.Group> = {};
+  zoneRooms: Record<string, THREE.Group> = {};
   streetFloor!: THREE.Mesh;
   hrFloor!: THREE.Mesh;
   playerUpFloor!: THREE.Mesh;
@@ -167,27 +168,6 @@ export class World3D {
     dining.receiveShadow = true;
     this.root.add(dining);
 
-    // North strip abuts kitchen/dining at z=-6 (no XZ overlap with main floors)
-    const northD = 4.35;
-    const northZ = -8.175; // south edge = -6.0
-    // Street / yard (north-east) — cooler gray, not acid
-    this.streetFloor = box(12, 0.12, northD, 0x7a8078, -0.06);
-    this.streetFloor.position.set(4.5, 0, northZ);
-    this.streetFloor.receiveShadow = true;
-    this.root.add(this.streetFloor);
-
-    // HR / Player wing floors (muted neutrals) — exclusive XZ tiles north of kitchen
-    this.hrFloor = box(5, 0.12, northD, 0xc2ad92, -0.06);
-    this.hrFloor.position.set(-8.5, 0, northZ);
-    this.hrFloor.receiveShadow = true;
-    this.root.add(this.hrFloor);
-    this.playerUpFloor = box(4.5, 0.12, northD, 0xbaa282, -0.06);
-    this.playerUpFloor.position.set(-3.75, 0, northZ);
-    this.playerUpFloor.receiveShadow = true;
-    this.root.add(this.playerUpFloor);
-
-    // kitPad overlay removed — coplanar tint caused flicker over kitchen floor
-
     // Zone rims: brass #c9a227, opacity ≤0.35; depthWrite off + polygonOffset vs floor
     const mkZoneRim = (w: number, d: number, x: number, z: number, op = 0.28) => {
       const zmesh = box(w, 0.03, d, 0xc9a227, 0.02);
@@ -209,45 +189,105 @@ export class World3D {
     mkZoneRim(2.2, 5.2, -2.2, 0.0, 0.24);
     mkZoneRim(11, 10, 5.5, 1.0, 0.18);
 
-    // Outer walls: wood #5c4033 + plaster #efe6d6 panels (plaster ≥0.08 clear of wood face)
+    // ARCH v3.3.1: continuous main-hall perimeter + flush door modules.
+    // Wing floors/rooms live in zoneRooms (hidden until setZoneOpen).
     const wallMat = 0x5c4033;
-    const plaster = 0xf7f1e8;
+    const plaster = 0xefe6d6;
     const woodT = 0.35;
     const plasT = 0.12;
-    const plasClear = 0.08; // min gap from wood surface → plaster surface
+    const plasClear = 0.08;
     const plasOff = woodT / 2 + plasT / 2 + plasClear; // 0.315
-    const backL = box(8, 2.4, woodT, wallMat, 0);
-    backL.position.set(-8, 0, -10.1);
-    this.root.add(backL);
-    const backLP = box(6.5, 1.6, plasT, plaster, 0.4);
-    backLP.position.set(-8, 0, -10.1 + plasOff);
-    this.root.add(backLP);
-    const backR = box(8, 2.4, woodT, wallMat, 0);
-    backR.position.set(8, 0, -10.1);
-    this.root.add(backR);
-    const backRP = box(6.5, 1.6, plasT, plaster, 0.4);
-    backRP.position.set(8, 0, -10.1 + plasOff);
-    this.root.add(backRP);
-    const left = box(woodT, 2.4, 16.5, wallMat, 0);
-    left.position.set(-12.1, 0, -2);
-    this.root.add(left);
-    const leftP = box(plasT, 1.6, 14, plaster, 0.4);
-    leftP.position.set(-12.1 + plasOff, 0, -2);
-    this.root.add(leftP);
-    const right = box(woodT, 2.4, 16.5, wallMat, 0);
-    right.position.set(12.1, 0, -2);
-    this.root.add(right);
-    const rightP = box(plasT, 1.6, 14, plaster, 0.4);
-    rightP.position.set(12.1 - plasOff, 0, -2);
-    this.root.add(rightP);
-    const front = box(24.5, 2.4, woodT, wallMat, 0);
-    front.position.set(0, 0, 6.15);
-    this.root.add(front);
-    const frontP = box(20, 1.6, plasT, plaster, 0.4);
-    frontP.position.set(0, 0, 6.15 - plasOff);
-    this.root.add(frontP);
+    const wallH = 2.4;
+    const xL = -12.1;
+    const xR = 12.1;
+    const zN = -6.05; // solid north perimeter (main hall ends here)
+    const zS = 6.15;
 
-    // Sunny windows (warm glass, not acid fills) — more daylight into room
+    const addWood = (w: number, h: number, d: number, x: number, y0: number, z: number) => {
+      const m = box(w, h, d, wallMat, y0);
+      m.position.set(x, 0, z);
+      this.root.add(m);
+      return m;
+    };
+    const addPlaster = (w: number, h: number, d: number, x: number, y0: number, z: number) => {
+      const m = box(w, h, d, plaster, y0);
+      m.position.set(x, 0, z);
+      this.root.add(m);
+      return m;
+    };
+
+    // --- North wall segments (along X) with door gaps ---
+    type DoorX = { id: string; cx: number; half: number };
+    const northDoors: DoorX[] = [
+      { id: 'hr', cx: -8.5, half: 0.75 },
+      { id: 'playerUp', cx: -4.0, half: 0.75 },
+      { id: 'restroom', cx: 0.5, half: 0.7 },
+      { id: 'street', cx: 3.0, half: 1.05 },
+      { id: 'driveThru', cx: 9.5, half: 0.75 },
+    ];
+    {
+      let cursor = xL;
+      const y0 = 0;
+      for (const door of northDoors) {
+        const gapL = door.cx - door.half;
+        const gapR = door.cx + door.half;
+        const segW = gapL - cursor;
+        if (segW > 0.08) {
+          const mid = cursor + segW / 2;
+          addWood(segW, wallH, woodT, mid, y0, zN);
+          addPlaster(Math.max(0.2, segW - 0.35), 1.6, plasT, mid, 0.4, zN + plasOff);
+        }
+        cursor = gapR;
+      }
+      const tailW = xR - cursor;
+      if (tailW > 0.08) {
+        const mid = cursor + tailW / 2;
+        addWood(tailW, wallH, woodT, mid, y0, zN);
+        addPlaster(Math.max(0.2, tailW - 0.35), 1.6, plasT, mid, 0.4, zN + plasOff);
+      }
+    }
+
+    // --- South wall (solid) ---
+    addWood(xR - xL, wallH, woodT, 0, 0, zS);
+    addPlaster(20, 1.6, plasT, 0, 0.4, zS - plasOff);
+
+    // --- West wall segments (along Z) with storage door ---
+    const storageDoor = { cz: -2.5, half: 0.85 };
+    {
+      const z0 = zN;
+      const z1 = storageDoor.cz - storageDoor.half;
+      const z2 = storageDoor.cz + storageDoor.half;
+      const z3 = zS;
+      const seg = (za: number, zb: number) => {
+        const d = zb - za;
+        if (d < 0.08) return;
+        const mid = (za + zb) / 2;
+        addWood(woodT, wallH, d, xL, 0, mid);
+        addPlaster(plasT, 1.6, Math.max(0.2, d - 0.35), xL + plasOff, 0.4, mid);
+      };
+      seg(z0, z1);
+      seg(z2, z3);
+    }
+
+    // --- East wall segments (along Z) with wingB door ---
+    const wingBDoor = { cz: 1.5, half: 0.9 };
+    {
+      const z0 = zN;
+      const z1 = wingBDoor.cz - wingBDoor.half;
+      const z2 = wingBDoor.cz + wingBDoor.half;
+      const z3 = zS;
+      const seg = (za: number, zb: number) => {
+        const d = zb - za;
+        if (d < 0.08) return;
+        const mid = (za + zb) / 2;
+        addWood(woodT, wallH, d, xR, 0, mid);
+        addPlaster(plasT, 1.6, Math.max(0.2, d - 0.35), xR - plasOff, 0.4, mid);
+      };
+      seg(z0, z1);
+      seg(z2, z3);
+    }
+
+    // Sunny windows (warm glass) — main hall only
     const addWindow = (wx: number, wy: number, wz: number, ww: number, wh: number, wd: number) => {
       const glass = box(ww, wh, wd, 0xc8e0f0, wy);
       const gm = glass.material as THREE.MeshStandardMaterial;
@@ -265,21 +305,22 @@ export class World3D {
       frame.position.set(wx, 0, wz);
       this.root.add(frame);
     };
-    // Left wall windows
-    addWindow(-12.1 + plasOff + 0.02, 0.55, -5.5, 0.08, 1.15, 2.2);
-    addWindow(-12.1 + plasOff + 0.02, 0.55, -1.5, 0.08, 1.15, 2.2);
-    addWindow(-12.1 + plasOff + 0.02, 0.55, 2.5, 0.08, 1.15, 2.0);
+    // Left wall windows (south of storage door / mid / south)
+    addWindow(xL + plasOff + 0.02, 0.55, -5.0, 0.08, 1.15, 1.6);
+    addWindow(xL + plasOff + 0.02, 0.55, 0.8, 0.08, 1.15, 2.0);
+    addWindow(xL + plasOff + 0.02, 0.55, 3.8, 0.08, 1.15, 1.6);
     // Right wall windows
-    addWindow(12.1 - plasOff - 0.02, 0.55, -5.0, 0.08, 1.15, 2.4);
-    addWindow(12.1 - plasOff - 0.02, 0.55, 0.5, 0.08, 1.15, 2.4);
-    addWindow(12.1 - plasOff - 0.02, 0.55, 3.5, 0.08, 1.15, 1.8);
-    // Back (north) windows — street light
-    addWindow(-5.5, 0.55, -10.1 + plasOff + 0.02, 2.4, 1.15, 0.08);
-    addWindow(5.5, 0.55, -10.1 + plasOff + 0.02, 2.4, 1.15, 0.08);
-    addWindow(0, 0.55, -10.1 + plasOff + 0.02, 2.0, 1.15, 0.08);
+    addWindow(xR - plasOff - 0.02, 0.55, -4.2, 0.08, 1.15, 2.0);
+    addWindow(xR - plasOff - 0.02, 0.55, -0.5, 0.08, 1.15, 1.6);
+    addWindow(xR - plasOff - 0.02, 0.55, 4.0, 0.08, 1.15, 1.6);
+    // North wall high windows between doors (solid wall — no void holes)
+    addWindow(-10.3, 0.7, zN + plasOff + 0.02, 1.6, 0.85, 0.08);
+    addWindow(-6.2, 0.7, zN + plasOff + 0.02, 1.4, 0.85, 0.08);
+    addWindow(-1.6, 0.7, zN + plasOff + 0.02, 1.2, 0.85, 0.08);
+    addWindow(6.5, 0.7, zN + plasOff + 0.02, 2.0, 0.85, 0.08);
     // Front (south) high windows
-    addWindow(-6, 0.7, 6.15 - plasOff - 0.02, 2.2, 0.9, 0.08);
-    addWindow(6, 0.7, 6.15 - plasOff - 0.02, 2.2, 0.9, 0.08);
+    addWindow(-6, 0.7, zS - plasOff - 0.02, 2.2, 0.9, 0.08);
+    addWindow(6, 0.7, zS - plasOff - 0.02, 2.2, 0.9, 0.08);
 
     // Arch carpet kitchen↔dining (muted brick)
     const carpet = box(1.4, 0.04, 5.0, 0xb54a3a, 0.05);
@@ -290,46 +331,112 @@ export class World3D {
     path.position.set(3.0, 0, -4.2);
     this.root.add(path);
 
-    // Zone barriers: solid wood + thin center arch (same positions; unlock still hides group)
+    // --- Flush door panels (zoneBarriers) — solid wood + 🔒, no arch gap ---
     this.zoneBarriers = {};
-    const mkBar = (id: string, x: number, z: number, w: number, d: number) => {
+    this.zoneRooms = {};
+    const mkFlushDoor = (
+      id: string,
+      x: number,
+      z: number,
+      doorW: number,
+      axis: 'x' | 'z',
+    ) => {
       const g = new THREE.Group();
-      const wood = 0x5c4033;
-      const wallH = 2.2;
-      const gap = Math.min(1.35, Math.max(0.9, (w >= d ? w : d) * 0.32));
-      const lintelH = 0.38;
-      if (w >= d) {
-        const sideW = Math.max(0.28, (w - gap) / 2);
-        const leftW = box(sideW, wallH, d, wood, 0);
-        leftW.position.x = -(gap / 2 + sideW / 2);
-        const rightW = box(sideW, wallH, d, wood, 0);
-        rightW.position.x = gap / 2 + sideW / 2;
-        const lintel = box(gap + 0.12, lintelH, Math.max(0.28, d * 0.95), wood, wallH - lintelH);
-        g.add(leftW, rightW, lintel);
+      const thick = woodT * 0.92;
+      const panel = axis === 'x'
+        ? box(doorW - 0.04, wallH - 0.06, thick, wallMat, 0.03)
+        : box(thick, wallH - 0.06, doorW - 0.04, wallMat, 0.03);
+      // slight inset toward hall so it reads as door-in-wall
+      if (axis === 'x') panel.position.z = 0.04;
+      else panel.position.x = id === 'storage' ? 0.04 : -0.04;
+      // frame rails (flush, opaque wood — no translucent panels)
+      if (axis === 'x') {
+        const railL = box(0.1, wallH, thick + 0.04, wallMat, 0);
+        railL.position.x = -(doorW / 2 - 0.05);
+        const railR = box(0.1, wallH, thick + 0.04, wallMat, 0);
+        railR.position.x = doorW / 2 - 0.05;
+        const head = box(doorW, 0.12, thick + 0.04, wallMat, wallH - 0.12);
+        g.add(panel, railL, railR, head);
       } else {
-        const sideD = Math.max(0.28, (d - gap) / 2);
-        const a = box(w, wallH, sideD, wood, 0);
-        a.position.z = -(gap / 2 + sideD / 2);
-        const b = box(w, wallH, sideD, wood, 0);
-        b.position.z = gap / 2 + sideD / 2;
-        const lintel = box(Math.max(0.28, w * 0.95), lintelH, gap + 0.12, wood, wallH - lintelH);
-        g.add(a, b, lintel);
+        const railA = box(thick + 0.04, wallH, 0.1, wallMat, 0);
+        railA.position.z = -(doorW / 2 - 0.05);
+        const railB = box(thick + 0.04, wallH, 0.1, wallMat, 0);
+        railB.position.z = doorW / 2 - 0.05;
+        const head = box(thick + 0.04, 0.12, doorW, wallMat, wallH - 0.12);
+        g.add(panel, railA, railB, head);
       }
       const lock = this.makeTextSprite('🔒', { fontSize: 48, color: '#fff' });
-      lock.position.set(0, 1.35, 0);
-      lock.scale.set(1.2, 1.2, 1);
+      lock.position.set(0, 1.25, axis === 'x' ? 0.2 : (id === 'storage' ? 0.2 : -0.2));
+      lock.scale.set(1.1, 1.1, 1);
       g.add(lock);
       g.position.set(x, 0, z);
       this.root.add(g);
       this.zoneBarriers[id] = g;
     };
-    mkBar('hr', -8.5, -5.2, 4.5, 0.35);
-    mkBar('playerUp', -4.0, -5.2, 4.5, 0.35);
-    mkBar('street', 3.0, -4.5, 6, 0.35);
-    mkBar('storage', -10.5, -1.5, 0.35, 3);
-    mkBar('restroom', 0.5, -5.2, 3, 0.35);
-    mkBar('driveThru', 9.5, -4.0, 0.35, 4);
-    mkBar('wingB', 10.8, 1.5, 0.35, 5);
+
+    for (const d of northDoors) {
+      mkFlushDoor(d.id, d.cx, zN, d.half * 2, 'x');
+    }
+    mkFlushDoor('storage', xL, storageDoor.cz, storageDoor.half * 2, 'z');
+    mkFlushDoor('wingB', xR, wingBDoor.cz, wingBDoor.half * 2, 'z');
+
+    // --- Wing room boxes (floor + 3 walls); hidden until unlock ---
+    const mkWingBox = (
+      id: string,
+      fw: number,
+      fd: number,
+      cx: number,
+      cz: number,
+      floorCol: number,
+      open: 's' | 'e' | 'w',
+    ) => {
+      const g = new THREE.Group();
+      const fl = box(fw, 0.12, fd, floorCol, -0.06);
+      fl.position.set(cx, 0, cz);
+      fl.receiveShadow = true;
+      g.add(fl);
+      const wt = woodT;
+      const x0 = cx - fw / 2;
+      const x1 = cx + fw / 2;
+      const z0 = cz - fd / 2;
+      const z1 = cz + fd / 2;
+      const addRW = (w: number, d: number, x: number, z: number) => {
+        const m = box(w, wallH, d, wallMat, 0);
+        m.position.set(x, 0, z);
+        g.add(m);
+      };
+      if (open === 's') {
+        addRW(fw + wt, wt, cx, z0); // north
+        addRW(wt, fd, x0, cz); // west
+        addRW(wt, fd, x1, cz); // east
+      } else if (open === 'e') {
+        // open east toward hall (storage west of left wall)
+        addRW(wt, fd + wt, x0, cz); // west back
+        addRW(fw, wt, cx, z0); // north
+        addRW(fw, wt, cx, z1); // south
+      } else if (open === 'w') {
+        // open west toward hall (wingB east of right wall)
+        addRW(wt, fd + wt, x1, cz); // east back
+        addRW(fw, wt, cx, z0);
+        addRW(fw, wt, cx, z1);
+      }
+      g.visible = false;
+      this.root.add(g);
+      this.zoneRooms[id] = g;
+      return fl;
+    };
+
+    const northD = 4.2;
+    const northZ = zN - northD / 2; // abuts north wall
+    this.hrFloor = mkWingBox('hr', 4.8, northD, -8.5, northZ, 0xc2ad92, 's');
+    this.playerUpFloor = mkWingBox('playerUp', 4.0, northD, -4.0, northZ, 0xbaa282, 's');
+    mkWingBox('restroom', 2.8, northD, 0.5, northZ, 0xb8c4c0, 's');
+    this.streetFloor = mkWingBox('street', 4.6, northD, 4.4, northZ, 0x7a8078, 's');
+    mkWingBox('driveThru', 3.6, northD, 9.6, northZ, 0x6e746c, 's');
+    // storage west of continuous left wall
+    mkWingBox('storage', 3.4, 4.2, xL - 1.7 - woodT / 2, storageDoor.cz, 0xa89070, 'e');
+    // wingB east of continuous right wall
+    mkWingBox('wingB', 3.4, 5.0, xR + 1.7 + woodT / 2, wingBDoor.cz, 0xa89880, 'w');
 
     this.addPlant(10.8, -3.2);
     this.addPlant(-0.2, 5.2);
@@ -1080,6 +1187,8 @@ export class World3D {
   setZoneOpen(id: string, open: boolean) {
     const b = this.zoneBarriers[id];
     if (b) b.visible = !open;
+    const r = this.zoneRooms[id];
+    if (r) r.visible = open;
   }
 
   setStationBuilt(kind: 'grill' | 'prep' | 'counter' | 'trash', built: boolean) {
