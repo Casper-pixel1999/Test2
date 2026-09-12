@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
-import { box, cyl, makeCharacter, makePatty, makeBurgerMesh, makeSmokeParticle, makeMat } from './meshes';
+import { box, cyl, makeCharacter, makePatty, makeBurgerMesh, makeSmokeParticle } from './meshes';
 import { t, tf, getLang } from '../i18n';
 
 export type StationKind = 'grill' | 'prep' | 'counter' | 'table' | 'trash';
@@ -152,6 +152,7 @@ export class World3D {
 
   buildRoom() {
     // ~24×16 connected floors: kitchen west, dining center, street north, wings
+    // Floors share y≈-0.06 — shrink so XZ regions do not overlap (kills floor z-fight)
     const kitchen = box(11, 0.12, 12, 0xa67a55, -0.06);
     kitchen.position.set(-6.5, 0, 0);
     kitchen.receiveShadow = true;
@@ -162,34 +163,38 @@ export class World3D {
     dining.receiveShadow = true;
     this.root.add(dining);
 
-    // Street / yard (north) — cooler gray, not acid
-    this.streetFloor = box(18, 0.12, 6.5, 0x6a7068, -0.06);
-    this.streetFloor.position.set(0, 0, -7.2);
+    // North strip abuts kitchen/dining at z=-6 (no XZ overlap with main floors)
+    const northD = 4.35;
+    const northZ = -8.175; // south edge = -6.0
+    // Street / yard (north-east) — cooler gray, not acid
+    this.streetFloor = box(12, 0.12, northD, 0x6a7068, -0.06);
+    this.streetFloor.position.set(4.5, 0, northZ);
     this.streetFloor.receiveShadow = true;
     this.root.add(this.streetFloor);
 
-    // HR / Player wing floors (muted neutrals)
-    this.hrFloor = box(5, 0.12, 4.5, 0xb09a7f, -0.06);
-    this.hrFloor.position.set(-8.5, 0, -7.0);
+    // HR / Player wing floors (muted neutrals) — exclusive XZ tiles north of kitchen
+    this.hrFloor = box(5, 0.12, northD, 0xb09a7f, -0.06);
+    this.hrFloor.position.set(-8.5, 0, northZ);
+    this.hrFloor.receiveShadow = true;
     this.root.add(this.hrFloor);
-    this.playerUpFloor = box(5, 0.12, 4.5, 0xa89070, -0.06);
-    this.playerUpFloor.position.set(-4.0, 0, -7.0);
+    this.playerUpFloor = box(4.5, 0.12, northD, 0xa89070, -0.06);
+    this.playerUpFloor.position.set(-3.75, 0, northZ);
+    this.playerUpFloor.receiveShadow = true;
     this.root.add(this.playerUpFloor);
 
-    const kitPad = box(9.5, 0.02, 10.5, 0x8b6914, 0.01);
-    kitPad.position.set(-6.2, 0, 0);
-    kitPad.material = makeMat(0x8b6914);
-    (kitPad.material as THREE.MeshStandardMaterial).transparent = true;
-    (kitPad.material as THREE.MeshStandardMaterial).opacity = 0.22;
-    this.root.add(kitPad);
+    // kitPad overlay removed — coplanar tint caused flicker over kitchen floor
 
-    // Zone rims: brass #c9a227, opacity ≤0.35, no emissive fills
+    // Zone rims: brass #c9a227, opacity ≤0.35; depthWrite off + polygonOffset vs floor
     const mkZoneRim = (w: number, d: number, x: number, z: number, op = 0.28) => {
       const zmesh = box(w, 0.03, d, 0xc9a227, 0.02);
       zmesh.position.set(x, 0, z);
       const zm = zmesh.material as THREE.MeshStandardMaterial;
       zm.transparent = true;
       zm.opacity = op;
+      zm.depthWrite = false;
+      zm.polygonOffset = true;
+      zm.polygonOffsetFactor = -1;
+      zm.polygonOffsetUnits = -1;
       zm.emissive.setHex(0x000000);
       zm.emissiveIntensity = 0;
       this.root.add(zmesh);
@@ -200,38 +205,42 @@ export class World3D {
     mkZoneRim(2.2, 5.2, -2.0, 0.4, 0.24);
     mkZoneRim(10, 9.5, 5, 0.5, 0.18);
 
-    // Outer walls: wood #5c4033 + plaster #efe6d6 panels
+    // Outer walls: wood #5c4033 + plaster #efe6d6 panels (plaster ≥0.08 clear of wood face)
     const wallMat = 0x5c4033;
     const plaster = 0xefe6d6;
-    const backL = box(8, 2.4, 0.35, wallMat, 0);
+    const woodT = 0.35;
+    const plasT = 0.12;
+    const plasClear = 0.08; // min gap from wood surface → plaster surface
+    const plasOff = woodT / 2 + plasT / 2 + plasClear; // 0.315
+    const backL = box(8, 2.4, woodT, wallMat, 0);
     backL.position.set(-8, 0, -10.1);
     this.root.add(backL);
-    const backLP = box(6.5, 1.6, 0.12, plaster, 0.4);
-    backLP.position.set(-8, 0, -9.92);
+    const backLP = box(6.5, 1.6, plasT, plaster, 0.4);
+    backLP.position.set(-8, 0, -10.1 + plasOff);
     this.root.add(backLP);
-    const backR = box(8, 2.4, 0.35, wallMat, 0);
+    const backR = box(8, 2.4, woodT, wallMat, 0);
     backR.position.set(8, 0, -10.1);
     this.root.add(backR);
-    const backRP = box(6.5, 1.6, 0.12, plaster, 0.4);
-    backRP.position.set(8, 0, -9.92);
+    const backRP = box(6.5, 1.6, plasT, plaster, 0.4);
+    backRP.position.set(8, 0, -10.1 + plasOff);
     this.root.add(backRP);
-    const left = box(0.35, 2.4, 16.5, wallMat, 0);
+    const left = box(woodT, 2.4, 16.5, wallMat, 0);
     left.position.set(-12.1, 0, -2);
     this.root.add(left);
-    const leftP = box(0.12, 1.6, 14, plaster, 0.4);
-    leftP.position.set(-11.92, 0, -2);
+    const leftP = box(plasT, 1.6, 14, plaster, 0.4);
+    leftP.position.set(-12.1 + plasOff, 0, -2);
     this.root.add(leftP);
-    const right = box(0.35, 2.4, 16.5, wallMat, 0);
+    const right = box(woodT, 2.4, 16.5, wallMat, 0);
     right.position.set(12.1, 0, -2);
     this.root.add(right);
-    const rightP = box(0.12, 1.6, 14, plaster, 0.4);
-    rightP.position.set(11.92, 0, -2);
+    const rightP = box(plasT, 1.6, 14, plaster, 0.4);
+    rightP.position.set(12.1 - plasOff, 0, -2);
     this.root.add(rightP);
-    const front = box(24.5, 2.4, 0.35, wallMat, 0);
+    const front = box(24.5, 2.4, woodT, wallMat, 0);
     front.position.set(0, 0, 6.15);
     this.root.add(front);
-    const frontP = box(20, 1.6, 0.12, plaster, 0.4);
-    frontP.position.set(0, 0, 5.97);
+    const frontP = box(20, 1.6, plasT, plaster, 0.4);
+    frontP.position.set(0, 0, 6.15 - plasOff);
     this.root.add(frontP);
 
     // Arch carpet kitchen↔dining (muted brick)
@@ -243,16 +252,33 @@ export class World3D {
     path.position.set(2.5, 0, -4.2);
     this.root.add(path);
 
-    // Zone barriers (hidden when unlocked)
+    // Zone barriers: solid wood + thin center arch (same positions; unlock still hides group)
     this.zoneBarriers = {};
     const mkBar = (id: string, x: number, z: number, w: number, d: number) => {
       const g = new THREE.Group();
-      const b = box(w, 1.6, d, 0x2a1a10, 0);
-      (b.material as THREE.MeshStandardMaterial).transparent = true;
-      (b.material as THREE.MeshStandardMaterial).opacity = 0.85;
-      g.add(b);
+      const wood = 0x5c4033;
+      const wallH = 2.2;
+      const gap = Math.min(1.35, Math.max(0.9, (w >= d ? w : d) * 0.32));
+      const lintelH = 0.38;
+      if (w >= d) {
+        const sideW = Math.max(0.28, (w - gap) / 2);
+        const leftW = box(sideW, wallH, d, wood, 0);
+        leftW.position.x = -(gap / 2 + sideW / 2);
+        const rightW = box(sideW, wallH, d, wood, 0);
+        rightW.position.x = gap / 2 + sideW / 2;
+        const lintel = box(gap + 0.12, lintelH, Math.max(0.28, d * 0.95), wood, wallH - lintelH);
+        g.add(leftW, rightW, lintel);
+      } else {
+        const sideD = Math.max(0.28, (d - gap) / 2);
+        const a = box(w, wallH, sideD, wood, 0);
+        a.position.z = -(gap / 2 + sideD / 2);
+        const b = box(w, wallH, sideD, wood, 0);
+        b.position.z = gap / 2 + sideD / 2;
+        const lintel = box(Math.max(0.28, w * 0.95), lintelH, gap + 0.12, wood, wallH - lintelH);
+        g.add(a, b, lintel);
+      }
       const lock = this.makeTextSprite('🔒', { fontSize: 48, color: '#fff' });
-      lock.position.set(0, 1.2, 0);
+      lock.position.set(0, 1.35, 0);
       lock.scale.set(1.2, 1.2, 1);
       g.add(lock);
       g.position.set(x, 0, z);
