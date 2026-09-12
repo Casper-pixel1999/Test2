@@ -16,6 +16,9 @@ import {
 import { MetaSave, loadLocal, saveLocal as persistSave, migrateSave } from './save';
 
 const SKINS = ['#f1c27d', '#ffdeb4', '#e0ac69', '#c68642', '#8d5524'];
+/** Fixed muted cloth palette (no rainbow HSL) */
+const CLOTH = ['#6b7c6e', '#7a6b5d', '#5c6b7a', '#8b6b5c', '#6e5a6e', '#5a7068', '#7a5c4e', '#4a5c6a'];
+const HAIR = ['#2a2218', '#3d2e22', '#4a3a28', '#1a1510', '#5c4030', '#2c2418'];
 
 function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
 function dist(a: { x: number; z: number }, b: { x: number; z: number }) {
@@ -24,12 +27,13 @@ function dist(a: { x: number; z: number }, b: { x: number; z: number }) {
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 function patienceColor(p: number) {
   const t = clamp(p, 0, 1);
+  // muted sage → amber → brick
   if (t > 0.5) {
     const k = (t - 0.5) * 2;
-    return `rgb(${Math.round(241 - 80 * k)},${Math.round(196 + 20 * k)},${Math.round(15 + 20 * k)})`;
+    return `rgb(${Math.round(90 + 110 * (1 - k))},${Math.round(143 - 20 * (1 - k))},${Math.round(107 - 40 * (1 - k))})`;
   }
   const k = t * 2;
-  return `rgb(231,${Math.round(76 + 120 * k)},60)`;
+  return `rgb(${Math.round(181 - 20 * k)},${Math.round(74 + 70 * k)},${Math.round(58 + 20 * k)})`;
 }
 
 interface GrillSlot { progress: number; state: 'empty' | 'cooking' | 'ready' }
@@ -349,38 +353,52 @@ export class Game {
 
   updateBuildPads(dt: number) {
     const lv = this.restLevel();
-    const vis: { id: string; x: number; z: number; label: string; cost: number; paid: number; locked: boolean; lockLv?: number; visible: boolean }[] = [];
-    for (const def of BUILD_PADS) {
-      if (this.hasPad(def.id)) continue;
-      const reqOk = def.requires.every((r) => this.hasPad(r));
-      if (!reqOk) continue;
-      // show next pads only (gate by previous chain already via requires)
-      const locked = lv < def.minLevel;
-      const paid = this.state.padPaid[def.id] || 0;
+    const px = this.player?.x ?? 0;
+    const pz = this.player?.z ?? 0;
+    type Cand = { def: (typeof BUILD_PADS)[number]; idx: number; locked: boolean; paid: number; d: number };
+    const candidates: Cand[] = [];
+    BUILD_PADS.forEach((def, idx) => {
+      if (this.hasPad(def.id)) return;
+      if (!def.requires.every((r) => this.hasPad(r))) return;
+      candidates.push({
+        def,
+        idx,
+        locked: lv < def.minLevel,
+        paid: this.state.padPaid[def.id] || 0,
+        d: Math.hypot(def.x - px, def.z - pz),
+      });
+    });
+    // Next ≤2 by BUILD_PADS order; tie → closer to player. Presentation only.
+    candidates.sort((a, b) => a.idx - b.idx || a.d - b.d);
+    const nextIds = new Set(candidates.slice(0, 2).map((c) => c.def.id));
+    const vis: { id: string; x: number; z: number; label: string; cost: number; paid: number; locked: boolean; lockLv?: number; visible: boolean; dim?: boolean }[] = [];
+    for (const c of candidates) {
+      const def = c.def;
+      const isNext = nextIds.has(def.id);
+      if (!isNext) continue; // hide non-next (no ring/label/pay)
       vis.push({
         id: def.id, x: def.x, z: def.z,
         label: t(def.labelKey),
-        cost: def.cost, paid, locked, lockLv: def.minLevel,
+        cost: def.cost, paid: c.paid, locked: c.locked, lockLv: def.minLevel,
         visible: true,
       });
-      // stand-to-pay
-      if (!locked && this.player && dist(this.player, def) < 1.15) {
+      // stand-to-pay only for next unlocked pads
+      if (!c.locked && this.player && dist(this.player, def) < 1.15) {
         if (def.cost <= 0) {
           this.completePad(def.id);
         } else {
-          const need = def.cost - paid;
+          const need = def.cost - c.paid;
           if (need > 0 && this.state.cash <= 0.05) {
             if (this.time - this._padNeedToastAt >= 8) {
               this._padNeedToastAt = this.time;
               this.showToast(tf('padNeedMore', { n: Math.ceil(need) }));
             }
           } else if (need > 0 && this.state.cash > 0) {
-            // continuous drain while standing
             const drain = Math.min(this.state.cash, need, Math.max(0.5, 28 * dt));
             this.state.cash -= drain;
-            this.state.padPaid[def.id] = paid + drain;
+            this.state.padPaid[def.id] = c.paid + drain;
             if (this.state.padPaid[def.id] >= def.cost - 0.05) {
-              this.state.cash += this.state.padPaid[def.id] - def.cost; // tiny float fix
+              this.state.cash += this.state.padPaid[def.id] - def.cost;
               this.state.padPaid[def.id] = def.cost;
               this.completePad(def.id);
             }
@@ -693,7 +711,7 @@ export class Game {
       this.state.cash += got;
       this.state.sessionEarned += got;
       this.syncMissionEarn();
-      this.float(`+$${got}`, this.player.x, this.player.z, '#f1c40f');
+      this.float(`+$${got}`, this.player.x, this.player.z, '#c9a227');
       sfx.play('pay');
     }
     if (this.hasPad('grill_1')) this.updateGrill(dt);
@@ -778,13 +796,13 @@ export class Game {
 
   getFocusStation(): { x: number; z: number; kind: string; color: number } | null {
     const list: { x: number; z: number; r: number; kind: string; color: number }[] = [
-      { ...this.layout.grill.interact, kind: 'grill', color: 0xff6b35 },
-      { ...this.layout.prep.interact, kind: 'prep', color: 0xf1c40f },
-      { ...this.layout.counter.interact, kind: 'counter', color: 0x2ecc71 },
+      { ...this.layout.grill.interact, kind: 'grill', color: 0xb54a3a },
+      { ...this.layout.prep.interact, kind: 'prep', color: 0xc9a227 },
+      { ...this.layout.counter.interact, kind: 'counter', color: 0x5a8f6b },
     ];
     for (const tb of this.world.tables) {
       if (tb.unlocked && tb.dirty) {
-        list.push({ x: tb.x, z: tb.z - 1.05, r: 1.2, kind: 'table', color: 0x5dade2 });
+        list.push({ x: tb.x, z: tb.z - 1.05, r: 1.2, kind: 'table', color: 0xa89070 });
       }
     }
     let best: typeof list[0] | null = null;
@@ -915,9 +933,9 @@ export class Game {
         this.state.sessionEarned += 3;
         this.state.totalCleaned++;
         this.bumpMission('clean', 1);
-        this.float('+$3', tb.x, tb.z, '#2ecc71');
+        this.float('+$3', tb.x, tb.z, '#5a8f6b');
         this.world.punchTableClean(tb);
-        this.float('✨', tb.x, tb.z, '#f1c40f');
+        this.float('✨', tb.x, tb.z, '#c9a227');
         sfx.play('clean');
         if (this.tutorialStep <= 4) {
           this.tutorialStep = 5;
@@ -940,7 +958,7 @@ export class Game {
       prep.craft.t += dt;
       if (prep.craft.t >= prep.craft.need) {
         addBurger(prep.burgers, prep.craft.kind);
-        this.float(menuItem(prep.craft.kind).icon, this.layout.prep.x, this.layout.prep.z, '#f1c40f');
+        this.float(menuItem(prep.craft.kind).icon, this.layout.prep.x, this.layout.prep.z, '#c9a227');
         sfx.play('assemble');
         prep.craft = null;
         if (this.tutorialStep <= 2) this.tutorialStep = 3;
@@ -1038,9 +1056,9 @@ export class Game {
       this.customers.push({
         x: sx, z: sz, state: 'queue',
         patience: pat, patienceMax: pat, order, trait,
-        shirt: `hsl(${(Math.random() * 360) | 0},62%,56%)`,
+        shirt: CLOTH[(Math.random() * CLOTH.length) | 0],
         skin: SKINS[(Math.random() * SKINS.length) | 0],
-        hair: `hsl(${(Math.random() * 40 + 8) | 0},38%,${(18 + Math.random() * 22) | 0}%)`,
+        hair: HAIR[(Math.random() * HAIR.length) | 0],
         shape: (Math.random() * 4) | 0,
         table: null, eatTime: 0, facing: -1,
       });
@@ -1074,7 +1092,7 @@ export class Game {
           this.bumpMission('serve', 1);
           this.syncMissionEarn();
           (c as any)._tip = tip;
-          this.float(`+$${instant}`, free.x, free.z, '#f1c40f');
+          this.float(`+$${instant}`, free.x, free.z, '#c9a227');
           this.float(menuItem(need).icon, free.x, free.z + 0.3, '#fff');
           sfx.play('pay');
           this.world.punchCounter();
@@ -1323,7 +1341,7 @@ export class Game {
   showToast(text: string) {
     const host = document.getElementById('toastHost');
     if (!host) {
-      this.float(text, this.player?.x ?? 0, this.player?.z ?? 0, '#ffe566');
+      this.float(text, this.player?.x ?? 0, this.player?.z ?? 0, '#d4a574');
       return;
     }
     const el = document.createElement('div');
@@ -1484,7 +1502,7 @@ export class Game {
     const tgt = this.tutorialTarget();
     if (tgt) {
       this.world.setTutorialTarget(tgt.x, tgt.z, this.time);
-      if (stuckPulse) this.world.setFocus(tgt.x, tgt.z, 0xffe566);
+      if (stuckPulse) this.world.setFocus(tgt.x, tgt.z, 0xc9a227);
     } else {
       this.world.setTutorialTarget(null, null, this.time);
     }
@@ -1663,7 +1681,7 @@ export class Game {
     this.setPaused(false);
     if (ok) {
       this.doubleProfitUntil = this.time + 60;
-      this.float(t('rewardOk'), this.player.x, this.player.z, '#f1c40f');
+      this.float(t('rewardOk'), this.player.x, this.player.z, '#c9a227');
       sfx.play('buy');
     } else {
       this.float(t('rewardFail'), this.player.x, this.player.z, '#e74c3c');

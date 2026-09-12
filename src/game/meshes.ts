@@ -86,11 +86,11 @@ export function makeCharacter(opts: {
   if (opts.hat === 'chef') {
     const brim = box(0.42, 0.06, 0.42, 0xffffff, 1.12);
     const puff = cyl(0.2, 0.22, 0xffffff, 1.18, 10);
-    const band = box(0.44, 0.04, 0.44, 0xe74c3c, 1.12);
+    const band = box(0.44, 0.04, 0.44, 0xb54a3a, 1.12);
     g.add(brim, puff, band);
   } else if (opts.hat === 'cap') {
-    const cap = cyl(0.2, 0.1, 0x8e44ad, 1.12, 10);
-    const bill = box(0.22, 0.04, 0.14, 0x8e44ad, 1.12);
+    const cap = cyl(0.2, 0.1, 0x5c3d6e, 1.12, 10);
+    const bill = box(0.22, 0.04, 0.14, 0x5c3d6e, 1.12);
     bill.position.z = 0.16;
     g.add(cap, bill);
   } else if (opts.hat === 'bow') {
@@ -132,11 +132,11 @@ export function makeBurgerMesh(kind: 'classic' | 'cheese' | 'double' = 'classic'
     g.add(patty2);
   }
   if (kind === 'cheese') {
-    const cheese = box(0.36, 0.025, 0.36, 0xf1c40f, 0.09);
+    const cheese = box(0.36, 0.025, 0.36, 0xe8c96a, 0.09);
     cheese.position.y = 0.1;
     g.add(cheese);
   }
-  const lettuce = box(0.34, 0.03, 0.34, kind === 'cheese' ? 0x27ae60 : 0x2ecc71, kind === 'double' ? 0.16 : 0.08);
+  const lettuce = box(0.34, 0.03, 0.34, kind === 'cheese' ? 0x5a8f6b : 0x6a9a6e, kind === 'double' ? 0.16 : 0.08);
   lettuce.position.y = kind === 'double' ? 0.17 : 0.09;
   const bunBot = new THREE.Mesh(
     new THREE.CylinderGeometry(0.2, 0.2, 0.06, 10),

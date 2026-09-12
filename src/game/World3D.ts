@@ -124,10 +124,11 @@ export class World3D {
   }
 
   setupLights() {
-    const hemi = new THREE.HemisphereLight(0xfff0dd, 0x3a2818, 0.85);
+    // Warmer key (~3400K feel), ~20% lower intensity; weak cool fill
+    const hemi = new THREE.HemisphereLight(0xfff2e0, 0x3a2818, 0.68);
     this.scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xffe0b0, 1.15);
+    const sun = new THREE.DirectionalLight(0xffe4c4, 0.92);
     sun.position.set(8, 18, 6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -140,96 +141,105 @@ export class World3D {
     sun.shadow.bias = -0.001;
     this.scene.add(sun);
 
-    const warm = new THREE.PointLight(0xff8c42, 1.2, 12, 1.5);
+    const warm = new THREE.PointLight(0xffa060, 0.95, 12, 1.5);
     warm.position.set(-6, 3.2, -2.5);
     this.scene.add(warm);
 
-    const cool = new THREE.PointLight(0x88aaff, 0.55, 14, 1.5);
+    const cool = new THREE.PointLight(0xa8b4c0, 0.28, 14, 1.5);
     cool.position.set(5, 3, 1);
     this.scene.add(cool);
   }
 
   buildRoom() {
     // ~24×16 connected floors: kitchen west, dining center, street north, wings
-    const kitchen = box(11, 0.12, 12, 0xc4784a, -0.06);
+    const kitchen = box(11, 0.12, 12, 0xa67a55, -0.06);
     kitchen.position.set(-6.5, 0, 0);
     kitchen.receiveShadow = true;
     this.root.add(kitchen);
 
-    const dining = box(12, 0.12, 12, 0x7d5a38, -0.06);
+    const dining = box(12, 0.12, 12, 0xc4b09a, -0.06);
     dining.position.set(5, 0, 0);
     dining.receiveShadow = true;
     this.root.add(dining);
 
-    // Street / yard (north) — locked look until open
-    this.streetFloor = box(18, 0.12, 6.5, 0x4a4a52, -0.06);
+    // Street / yard (north) — cooler gray, not acid
+    this.streetFloor = box(18, 0.12, 6.5, 0x6a7068, -0.06);
     this.streetFloor.position.set(0, 0, -7.2);
     this.streetFloor.receiveShadow = true;
     this.root.add(this.streetFloor);
 
-    // HR / Player wing floors
-    this.hrFloor = box(5, 0.12, 4.5, 0x5a6a8a, -0.06);
+    // HR / Player wing floors (muted neutrals)
+    this.hrFloor = box(5, 0.12, 4.5, 0xb09a7f, -0.06);
     this.hrFloor.position.set(-8.5, 0, -7.0);
     this.root.add(this.hrFloor);
-    this.playerUpFloor = box(5, 0.12, 4.5, 0x6a5a8a, -0.06);
+    this.playerUpFloor = box(5, 0.12, 4.5, 0xa89070, -0.06);
     this.playerUpFloor.position.set(-4.0, 0, -7.0);
     this.root.add(this.playerUpFloor);
 
-    const kitPad = box(9.5, 0.02, 10.5, 0xd4895a, 0.01);
+    const kitPad = box(9.5, 0.02, 10.5, 0x8b6914, 0.01);
     kitPad.position.set(-6.2, 0, 0);
-    kitPad.material = makeMat(0xd4895a);
+    kitPad.material = makeMat(0x8b6914);
     (kitPad.material as THREE.MeshStandardMaterial).transparent = true;
-    (kitPad.material as THREE.MeshStandardMaterial).opacity = 0.25;
+    (kitPad.material as THREE.MeshStandardMaterial).opacity = 0.22;
     this.root.add(kitPad);
 
-    const grillZone = box(3.4, 0.03, 2.6, 0xe64a28, 0.02);
-    grillZone.position.set(-7.2, 0, -1.6);
-    (grillZone.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x661800);
-    (grillZone.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.35;
-    this.root.add(grillZone);
+    // Zone rims: brass #c9a227, opacity ≤0.35, no emissive fills
+    const mkZoneRim = (w: number, d: number, x: number, z: number, op = 0.28) => {
+      const zmesh = box(w, 0.03, d, 0xc9a227, 0.02);
+      zmesh.position.set(x, 0, z);
+      const zm = zmesh.material as THREE.MeshStandardMaterial;
+      zm.transparent = true;
+      zm.opacity = op;
+      zm.emissive.setHex(0x000000);
+      zm.emissiveIntensity = 0;
+      this.root.add(zmesh);
+      return zmesh;
+    };
+    mkZoneRim(3.4, 2.6, -7.2, -1.6, 0.28);
+    mkZoneRim(3.4, 2.2, -7.2, 1.4, 0.24);
+    mkZoneRim(2.2, 5.2, -2.0, 0.4, 0.24);
+    mkZoneRim(10, 9.5, 5, 0.5, 0.18);
 
-    const prepZone = box(3.4, 0.03, 2.2, 0xf1c40f, 0.02);
-    prepZone.position.set(-7.2, 0, 1.4);
-    (prepZone.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x665500);
-    (prepZone.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.25;
-    this.root.add(prepZone);
-
-    const counterZone = box(2.2, 0.03, 5.2, 0x27ae60, 0.02);
-    counterZone.position.set(-2.0, 0, 0.4);
-    (counterZone.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x0a4020);
-    (counterZone.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3;
-    this.root.add(counterZone);
-
-    const hallZone = box(10, 0.03, 9.5, 0x4a6fa5, 0.02);
-    hallZone.position.set(5, 0, 0.5);
-    (hallZone.material as THREE.MeshStandardMaterial).transparent = true;
-    (hallZone.material as THREE.MeshStandardMaterial).opacity = 0.35;
-    this.root.add(hallZone);
-
-    // Outer walls with arch gaps (visual)
-    const wallMat = 0x4a2c1a;
+    // Outer walls: wood #5c4033 + plaster #efe6d6 panels
+    const wallMat = 0x5c4033;
+    const plaster = 0xefe6d6;
     const backL = box(8, 2.4, 0.35, wallMat, 0);
     backL.position.set(-8, 0, -10.1);
     this.root.add(backL);
+    const backLP = box(6.5, 1.6, 0.12, plaster, 0.4);
+    backLP.position.set(-8, 0, -9.92);
+    this.root.add(backLP);
     const backR = box(8, 2.4, 0.35, wallMat, 0);
     backR.position.set(8, 0, -10.1);
     this.root.add(backR);
+    const backRP = box(6.5, 1.6, 0.12, plaster, 0.4);
+    backRP.position.set(8, 0, -9.92);
+    this.root.add(backRP);
     const left = box(0.35, 2.4, 16.5, wallMat, 0);
     left.position.set(-12.1, 0, -2);
     this.root.add(left);
+    const leftP = box(0.12, 1.6, 14, plaster, 0.4);
+    leftP.position.set(-11.92, 0, -2);
+    this.root.add(leftP);
     const right = box(0.35, 2.4, 16.5, wallMat, 0);
     right.position.set(12.1, 0, -2);
     this.root.add(right);
+    const rightP = box(0.12, 1.6, 14, plaster, 0.4);
+    rightP.position.set(11.92, 0, -2);
+    this.root.add(rightP);
     const front = box(24.5, 2.4, 0.35, wallMat, 0);
     front.position.set(0, 0, 6.15);
     this.root.add(front);
+    const frontP = box(20, 1.6, 0.12, plaster, 0.4);
+    frontP.position.set(0, 0, 5.97);
+    this.root.add(frontP);
 
-    // Arch carpet kitchen↔dining
-    const carpet = box(1.2, 0.04, 4.5, 0xc0392b, 0.05);
+    // Arch carpet kitchen↔dining (muted brick)
+    const carpet = box(1.2, 0.04, 4.5, 0xb54a3a, 0.05);
     carpet.position.set(-1.0, 0, 0.2);
     this.root.add(carpet);
-    // Path to street
-    const path = box(3.5, 0.04, 1.2, 0xd4a017, 0.05);
+    // Path to street (caramel)
+    const path = box(3.5, 0.04, 1.2, 0xd4a574, 0.05);
     path.position.set(2.5, 0, -4.2);
     this.root.add(path);
 
@@ -262,7 +272,7 @@ export class World3D {
 
     this.titleSprite = this.makeTextSprite(getLang() === 'en' ? '🍔 Burger Rush' : '🍔 Бургерная', {
       fontSize: 48,
-      color: '#ffd36a',
+      color: '#e8d5a3',
     });
     this.titleSprite.position.set(0, 3.2, 5.4);
     this.titleSprite.scale.set(6, 1.5, 1);
@@ -276,9 +286,9 @@ export class World3D {
   addPlant(x: number, z: number) {
     const pot = cyl(0.22, 0.28, 0x5d3a1a, 0, 8);
     pot.position.set(x, 0, z);
-    const leaf1 = cyl(0.16, 0.5, 0x27ae60, 0.28, 6);
+    const leaf1 = cyl(0.16, 0.5, 0x5a8f6b, 0.28, 6);
     leaf1.position.set(x, 0, z);
-    const leaf2 = cyl(0.12, 0.4, 0x1e8449, 0.35, 6);
+    const leaf2 = cyl(0.12, 0.4, 0x3d6b4f, 0.35, 6);
     leaf2.position.set(x + 0.12, 0, z + 0.05);
     this.root.add(pot, leaf1, leaf2);
   }
@@ -287,19 +297,25 @@ export class World3D {
     // Grill
     this.grillGroup = new THREE.Group();
     this.grillGroup.position.set(-7.2, 0, -1.6);
-    const grillBody = box(2.4, 0.7, 1.6, 0x2a2a2a, 0);
-    const grillTop = box(2.2, 0.08, 1.4, 0x444444, 0.7);
+    const grillBody = box(2.4, 0.7, 1.6, 0x3a3a3e, 0);
+    (grillBody.material as THREE.MeshStandardMaterial).metalness = 0.72;
+    (grillBody.material as THREE.MeshStandardMaterial).roughness = 0.35;
+    const grillTop = box(2.2, 0.08, 1.4, 0x3a3a3e, 0.7);
+    (grillTop.material as THREE.MeshStandardMaterial).metalness = 0.85;
+    (grillTop.material as THREE.MeshStandardMaterial).roughness = 0.28;
     this.grillGroup.add(grillBody, grillTop);
     for (let i = 0; i < 3; i++) {
       const sx = -0.7 + i * 0.7;
-      const pan = cyl(0.28, 0.05, 0x111111, 0.78, 12);
+      const pan = cyl(0.28, 0.05, 0x1a1a1c, 0.78, 12);
+      (pan.material as THREE.MeshStandardMaterial).metalness = 0.8;
+      (pan.material as THREE.MeshStandardMaterial).roughness = 0.3;
       pan.position.x = sx;
       const patty = makePatty(false);
       patty.position.set(sx, 0.88, 0);
       patty.visible = false;
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.32, 0.38, 24),
-        new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({ color: 0x5a8f6b, transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
       );
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(sx, 0.92, 0);
@@ -307,19 +323,19 @@ export class World3D {
       const progGeo = new THREE.RingGeometry(0.32, 0.38, 24, 1, 0, 0.01);
       const progress = new THREE.Mesh(
         progGeo,
-        new THREE.MeshBasicMaterial({ color: 0xf39c12, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({ color: 0xc9a227, side: THREE.DoubleSide }),
       );
       progress.rotation.x = -Math.PI / 2;
       progress.position.set(sx, 0.93, 0);
       progress.visible = false;
-      const bang = this.makeTextSprite('!', { fontSize: 72, color: '#ffe566' });
+      const bang = this.makeTextSprite('!', { fontSize: 72, color: '#d4a574' });
       bang.position.set(sx, 1.35, 0);
       bang.scale.set(0.55, 0.55, 1);
       bang.visible = false;
       this.grillGroup.add(pan, patty, ring, progress, bang);
       this.grillSlots.push({ patty, ring, progress, bang, baseScale: 1, punchT: 0 });
     }
-    const grillLabel = this.makeTextSprite('🔥 ' + t('zoneGrill'), { fontSize: 36, color: '#ffd0c0' });
+    const grillLabel = this.makeTextSprite('🔥 ' + t('zoneGrill'), { fontSize: 36, color: '#e8d5a3' });
     grillLabel.position.set(0, 1.6, 0);
     grillLabel.scale.set(2.2, 0.55, 1);
     this.grillGroup.add(grillLabel);
@@ -328,14 +344,16 @@ export class World3D {
     // Prep
     this.prepGroup = new THREE.Group();
     this.prepGroup.position.set(-7.2, 0, 1.4);
-    const prepBody = box(2.4, 0.65, 1.4, 0xf4d03f, 0);
-    const board = box(2.0, 0.06, 1.1, 0xe8c27a, 0.65);
+    const prepBody = box(2.4, 0.65, 1.4, 0x6e4e32, 0);
+    const board = box(2.0, 0.06, 1.1, 0x9aa3a8, 0.65);
+    (board.material as THREE.MeshStandardMaterial).metalness = 0.55;
+    (board.material as THREE.MeshStandardMaterial).roughness = 0.35;
     this.prepGroup.add(prepBody, board);
-    this.prepLabel = this.makeTextSprite('🍖0  🍔0', { fontSize: 40, color: '#4a3208' });
+    this.prepLabel = this.makeTextSprite('🍖0  🍔0', { fontSize: 40, color: '#3a2208' });
     this.prepLabel.position.set(0, 1.35, 0);
     this.prepLabel.scale.set(2.0, 0.5, 1);
     this.prepGroup.add(this.prepLabel);
-    const prepZoneLbl = this.makeTextSprite('🍔 ' + t('zonePrep'), { fontSize: 32, color: '#5a3d00' });
+    const prepZoneLbl = this.makeTextSprite('🍔 ' + t('zonePrep'), { fontSize: 32, color: '#d4b896' });
     prepZoneLbl.position.set(0, 1.7, 0);
     prepZoneLbl.scale.set(2.2, 0.5, 1);
     this.prepGroup.add(prepZoneLbl);
@@ -344,12 +362,14 @@ export class World3D {
     // Counter
     this.counterGroup = new THREE.Group();
     this.counterGroup.position.set(-2.0, 0, 0.4);
-    const counterBody = box(1.2, 1.0, 4.4, 0x27ae60, 0);
-    const counterTop = box(1.3, 0.1, 4.5, 0x1e8449, 1.0);
+    const counterBody = box(1.2, 1.0, 4.4, 0x5c4033, 0);
+    const counterTop = box(1.3, 0.1, 4.5, 0x9aa3a8, 1.0);
+    (counterTop.material as THREE.MeshStandardMaterial).metalness = 0.5;
+    (counterTop.material as THREE.MeshStandardMaterial).roughness = 0.4;
     this.counterGroup.add(counterBody, counterTop);
     this.counterStack.position.set(0, 1.15, 1.5);
     this.counterGroup.add(this.counterStack);
-    const cLbl = this.makeTextSprite('✅ ' + t('zoneCounter'), { fontSize: 32, color: '#e8ffe8' });
+    const cLbl = this.makeTextSprite('✅ ' + t('zoneCounter'), { fontSize: 32, color: '#f3ebe0' });
     cLbl.position.set(0, 1.55, -1.6);
     cLbl.scale.set(2.0, 0.45, 1);
     this.counterGroup.add(cLbl);
@@ -358,10 +378,12 @@ export class World3D {
     // Trash
     this.trashGroup = new THREE.Group();
     this.trashGroup.position.set(-9.5, 0, 3.8);
-    const trash = box(1.0, 1.0, 1.0, 0x3a3a3a, 0);
-    const stripe = box(1.02, 0.15, 1.02, 0xf1c40f, 0.85);
+    const trash = box(1.0, 1.0, 1.0, 0x3a3a3e, 0);
+    (trash.material as THREE.MeshStandardMaterial).metalness = 0.45;
+    (trash.material as THREE.MeshStandardMaterial).roughness = 0.5;
+    const stripe = box(1.02, 0.15, 1.02, 0xa89070, 0.85);
     this.trashGroup.add(trash, stripe);
-    const tLbl = this.makeTextSprite('🗑️ ' + t('zoneTrash'), { fontSize: 28, color: '#f1c40f' });
+    const tLbl = this.makeTextSprite('🗑️ ' + t('zoneTrash'), { fontSize: 28, color: '#d4b896' });
     tLbl.position.set(0, 1.4, 0);
     tLbl.scale.set(1.8, 0.45, 1);
     this.trashGroup.add(tLbl);
@@ -375,16 +397,16 @@ export class World3D {
     positions.forEach(([x, z], i) => {
       const mesh = new THREE.Group();
       mesh.position.set(x, 0, z);
-      const top = box(1.35, 0.12, 1.35, 0xa67c52, 0.55);
+      const top = box(1.35, 0.12, 1.35, 0x7a5c3e, 0.55);
       const leg1 = box(0.12, 0.55, 0.12, 0x6b4a2a, 0);
       leg1.position.set(-0.5, 0, -0.5);
       const leg2 = leg1.clone(); leg2.position.set(0.5, 0, -0.5);
       const leg3 = leg1.clone(); leg3.position.set(-0.5, 0, 0.5);
       const leg4 = leg1.clone(); leg4.position.set(0.5, 0, 0.5);
-      const cloth = box(1.1, 0.04, 1.1, 0x5d8aa8, 0.67);
+      const cloth = box(1.1, 0.04, 1.1, 0xd9cfc0, 0.67);
       const dirtyFX = box(1.15, 0.08, 1.15, 0x4a2208, 0.68);
-      (dirtyFX.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x331100);
-      (dirtyFX.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.45;
+      (dirtyFX.material as THREE.MeshStandardMaterial).emissive = new THREE.Color(0x000000);
+      (dirtyFX.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
       dirtyFX.visible = false;
       const dirtyLabel = this.makeTextSprite('🤢 ' + t('dirtyLabel'), { fontSize: 36, color: '#ffcc88' });
       dirtyLabel.position.set(0, 1.35, 0);
@@ -410,7 +432,7 @@ export class World3D {
       });
     });
 
-    const hallLbl = this.makeTextSprite('🪑 ' + t('zoneTables'), { fontSize: 32, color: '#c8dcff' });
+    const hallLbl = this.makeTextSprite('🪑 ' + t('zoneTables'), { fontSize: 32, color: '#d4b896' });
     hallLbl.position.set(4.6, 0.4, -4.8);
     hallLbl.scale.set(2.4, 0.55, 1);
     this.root.add(hallLbl);
@@ -427,7 +449,7 @@ export class World3D {
   buildFocusAndTutorial() {
     this.focusRing = new THREE.Mesh(
       new THREE.RingGeometry(1.1, 1.35, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffe566, transparent: true, opacity: 0.75, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: 0xc9a227, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
     );
     this.focusRing.rotation.x = -Math.PI / 2;
     this.focusRing.position.y = 0.06;
@@ -437,7 +459,7 @@ export class World3D {
     this.tutorialArrow = new THREE.Group();
     const cone = new THREE.Mesh(
       new THREE.ConeGeometry(0.35, 0.7, 4),
-      new THREE.MeshBasicMaterial({ color: 0xffe566 }),
+      new THREE.MeshBasicMaterial({ color: 0xc9a227 }),
     );
     cone.rotation.x = Math.PI;
     this.tutorialArrow.add(cone);
@@ -466,13 +488,13 @@ export class World3D {
     // Floor top is ~y=0.06 — pads MUST sit above it or they are invisible (z-fight / inside mesh)
     type Pad = { x: number; z: number; color: number; r?: number; kind: string };
     const pads: Pad[] = [
-      { x: -7.2, z: -0.3, color: 0xff6b35, kind: 'grill' },
-      { x: -7.2, z: 2.5, color: 0xf1c40f, kind: 'prep' },
-      { x: -0.5, z: 0.4, color: 0x2ecc71, kind: 'counter' },
-      { x: -9.5, z: 2.8, color: 0xf1c40f, r: 0.9, kind: 'trash' },
+      { x: -7.2, z: -0.3, color: 0xb54a3a, kind: 'grill' },
+      { x: -7.2, z: 2.5, color: 0xc9a227, kind: 'prep' },
+      { x: -0.5, z: 0.4, color: 0x5a8f6b, kind: 'counter' },
+      { x: -9.5, z: 2.8, color: 0xa89070, r: 0.9, kind: 'trash' },
     ];
     this.tables.forEach((tb, i) => {
-      pads.push({ x: tb.x, z: tb.z - 1.05, color: 0x5dade2, r: 1.15, kind: `table-${i}` });
+      pads.push({ x: tb.x, z: tb.z - 1.05, color: 0xa89070, r: 1.15, kind: `table-${i}` });
     });
     const y = 0.13;
     this.interactPads = [];
@@ -482,7 +504,7 @@ export class World3D {
       const matRing = new THREE.MeshBasicMaterial({
         color: p.color,
         transparent: true,
-        opacity: 0.55,
+        opacity: 0.35,
         side: THREE.DoubleSide,
         depthTest: false,
         depthWrite: false,
@@ -496,7 +518,7 @@ export class World3D {
       const matDisc = new THREE.MeshBasicMaterial({
         color: p.color,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.16,
         side: THREE.DoubleSide,
         depthTest: false,
         depthWrite: false,
@@ -517,14 +539,14 @@ export class World3D {
     }
   }
 
-  /** Active pad brightest + ~1.2Hz pulse; others dimmer */
+  /** Active pad soft pulse; others quieter (no neon) */
   updateInteractPads(activeKind: string | null, time: number) {
-    const pulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(time * Math.PI * 2 * 1.2));
+    const pulse = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(time * Math.PI * 2 * 1.0));
     for (const p of this.interactPads) {
       const active = !!activeKind && p.kind === activeKind;
-      p.ringMat.opacity = active ? 0.55 + 0.4 * pulse : 0.32;
-      p.discMat.opacity = active ? 0.28 + 0.22 * pulse : 0.12;
-      const s = active ? 1 + 0.08 * pulse : 0.92;
+      p.ringMat.opacity = active ? 0.38 + 0.12 * pulse : 0.22;
+      p.discMat.opacity = active ? 0.2 + 0.1 * pulse : 0.1;
+      const s = active ? 1 + 0.04 * pulse : 0.94;
       p.ring.scale.set(s, s, s);
       p.disc.scale.set(s, s, s);
     }
@@ -558,16 +580,16 @@ export class World3D {
         if (!m || !('emissive' in m)) return;
         if (on) {
           m.emissive.setHex(color);
-          m.emissiveIntensity = 0.35;
+          m.emissiveIntensity = 0.18;
         } else if (m.userData._baseEmissive == null) {
           m.emissive.setHex(0x000000);
           m.emissiveIntensity = 0;
         }
       });
     };
-    boost(this.grillGroup, kind === 'grill', 0xff5520);
-    boost(this.prepGroup, kind === 'prep', 0xc9a000);
-    boost(this.counterGroup, kind === 'counter', 0x1e8449);
+    boost(this.grillGroup, kind === 'grill', 0xb54a3a);
+    boost(this.prepGroup, kind === 'prep', 0xc9a227);
+    boost(this.counterGroup, kind === 'counter', 0x5a8f6b);
   }
 
   punchGrillReady(slotIndex: number) {
@@ -660,6 +682,18 @@ export class World3D {
   }
 
   syncGrill(slots: { state: string; progress: number }[], cookNeed: number, time: number, dt = 0.016) {
+    const cooking = slots.some((s) => s.state === 'cooking');
+    this.grillGroup.traverse((obj) => {
+      const m = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (!m || !('emissive' in m)) return;
+      if (cooking) {
+        m.emissive.setHex(0x4a2010);
+        m.emissiveIntensity = 0.12;
+      } else if (!m.userData._keepEmissive) {
+        m.emissive.setHex(0x000000);
+        m.emissiveIntensity = 0;
+      }
+    });
     slots.forEach((s, i) => {
       const v = this.grillSlots[i];
       if (!v) return;
@@ -749,9 +783,9 @@ export class World3D {
       const top = tb.mesh.children[0] as THREE.Mesh;
       if (top?.material) {
         const mat = top.material as THREE.MeshStandardMaterial;
-        mat.color.setHex(tb.dirty ? 0x4a2208 : 0xa67c52);
-        mat.emissive.setHex(tb.dirty ? 0x221000 : 0x000000);
-        mat.emissiveIntensity = tb.dirty ? 0.35 : 0;
+        mat.color.setHex(tb.dirty ? 0x4a2208 : 0x7a5c3e);
+        mat.emissive.setHex(0x000000);
+        mat.emissiveIntensity = 0;
       }
       if (tb.cleanPunchT > 0) {
         tb.cleanPunchT = Math.max(0, tb.cleanPunchT - dt);
@@ -771,7 +805,9 @@ export class World3D {
     this.focusRing.visible = true;
     this.focusRing.position.x = x;
     this.focusRing.position.z = z;
-    (this.focusRing.material as THREE.MeshBasicMaterial).color.setHex(color);
+    const mat = this.focusRing.material as THREE.MeshBasicMaterial;
+    mat.color.setHex(color);
+    mat.opacity = Math.min(mat.opacity, 0.35) || 0.35;
   }
 
   setTutorialTarget(x: number | null, z: number | null, time: number) {
@@ -853,7 +889,7 @@ export class World3D {
     let m = this.workerMeshes.get(w);
     if (!m) {
       m = makeCharacter({
-        shirt: w.type === 'waiter' ? 0x1abc9c : 0x9b59b6,
+        shirt: w.type === 'waiter' ? 0x4a7a6a : 0x5c3d6e,
         hat: w.type === 'cleaner' ? 'cap' : 'bow',
         scale: 0.95,
       });
@@ -972,9 +1008,10 @@ export class World3D {
   }
 
   syncBuildPads(
-    pads: { id: string; x: number; z: number; label: string; cost: number; paid: number; locked: boolean; lockLv?: number; visible: boolean }[],
+    pads: { id: string; x: number; z: number; label: string; cost: number; paid: number; locked: boolean; lockLv?: number; visible: boolean; dim?: boolean }[],
   ) {
     const seen = new Set<string>();
+    const pulse = 1 + 0.05 * Math.sin(this.clock * Math.PI * 2); // ≤1.05
     for (const p of pads) {
       seen.add(p.id);
       let g = this.buildPadMeshes.get(p.id);
@@ -983,19 +1020,19 @@ export class World3D {
         g.position.set(p.x, 0, p.z);
         const disc = new THREE.Mesh(
           new THREE.CircleGeometry(0.95, 32),
-          new THREE.MeshBasicMaterial({ color: 0xf1c40f, transparent: true, opacity: 0.55, depthWrite: false }),
+          new THREE.MeshBasicMaterial({ color: 0xc9a227, transparent: true, opacity: 0.35, depthWrite: false }),
         );
         disc.rotation.x = -Math.PI / 2;
         disc.position.y = 0.14;
         disc.renderOrder = 18;
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(0.95, 1.15, 32),
-          new THREE.MeshBasicMaterial({ color: 0xffe566, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }),
+          new THREE.MeshBasicMaterial({ color: 0xa89070, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }),
         );
         ring.rotation.x = -Math.PI / 2;
         ring.position.y = 0.15;
         ring.renderOrder = 19;
-        const label = this.makeTextSprite(p.label, { fontSize: 36, color: '#fff8d0' });
+        const label = this.makeTextSprite(p.label, { fontSize: 36, color: '#f3ebe0' });
         label.position.set(0, 1.15, 0);
         label.scale.set(2.4, 0.55, 1);
         g.add(disc, ring, label);
@@ -1006,12 +1043,54 @@ export class World3D {
         this.buildPadMeshes.set(p.id, g);
       }
       g.visible = p.visible;
+      const disc = g.userData.disc as THREE.Mesh;
+      const ring = g.userData.ring as THREE.Mesh;
+      const label = g.userData.label as THREE.Sprite;
+      const discMat = disc.material as THREE.MeshBasicMaterial;
+      const ringMat = ring.material as THREE.MeshBasicMaterial;
+
+      if (p.dim) {
+        discMat.color.setHex(0x5a554c);
+        discMat.opacity = 0.12;
+        ring.visible = false;
+        label.visible = false;
+        g.scale.set(1, 1, 1);
+        continue;
+      }
+
+      label.visible = true;
       const costTxt = p.locked
         ? `🔒 ${p.lockLv != null ? tf('padLockedLv', { n: p.lockLv }) : ''}`
         : (p.cost <= 0 ? 'FREE' : (p.paid > 0 && p.paid < p.cost ? `$${Math.floor(p.paid)}/$${p.cost}` : `$${p.cost}`));
-      this.updateSpriteText(g.userData.label, `${p.label}\n${costTxt}`);
-      const mat = (g.userData.disc as THREE.Mesh).material as THREE.MeshBasicMaterial;
-      mat.color.setHex(p.locked ? 0x666666 : (p.paid > 0 ? 0x2ecc71 : 0xf1c40f));
+      this.updateSpriteText(label, `${p.label}\n${costTxt}`);
+
+      if (p.locked) {
+        discMat.color.setHex(0x5a554c);
+        discMat.opacity = 0.3;
+        ring.visible = false;
+        g.scale.set(1, 1, 1);
+      } else if (p.cost <= 0) {
+        discMat.color.setHex(0xa89070);
+        discMat.opacity = 0.3;
+        ring.visible = true;
+        ringMat.color.setHex(0xa89070);
+        ringMat.opacity = 0.35;
+        g.scale.set(1, 1, 1);
+      } else if (p.paid > 0 && p.paid < p.cost) {
+        discMat.color.setHex(0x5a8f6b);
+        discMat.opacity = 0.45;
+        ring.visible = true;
+        ringMat.color.setHex(0x5a8f6b);
+        ringMat.opacity = 0.4;
+        g.scale.set(pulse, 1, pulse);
+      } else {
+        discMat.color.setHex(0xc9a227);
+        discMat.opacity = 0.35;
+        ring.visible = true;
+        ringMat.color.setHex(0xa89070);
+        ringMat.opacity = 0.4;
+        g.scale.set(1, 1, 1);
+      }
     }
     for (const [id, g] of this.buildPadMeshes) {
       if (!seen.has(id)) { g.visible = false; }
@@ -1021,7 +1100,7 @@ export class World3D {
   spawnFloorCoin(x: number, z: number, value: number) {
     const m = new THREE.Mesh(
       new THREE.CylinderGeometry(0.22, 0.22, 0.08, 16),
-      new THREE.MeshStandardMaterial({ color: 0xf1c40f, emissive: 0xaa7700, emissiveIntensity: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: 0xc9a227, emissive: 0x6a5010, emissiveIntensity: 0.12, metalness: 0.55, roughness: 0.35 }),
     );
     m.position.set(x, 0.2, z);
     this.root.add(m);

@@ -44,7 +44,7 @@ html, body {
 }
 #loadBar {
   width: 0%; height: 100%;
-  background: linear-gradient(90deg, #f5a623, #ff6b35);
+  background: linear-gradient(90deg, #8f7350, #c9a227);
   transition: width .2s;
 }
 #loadText { opacity: .85; font-size: 1rem; }
@@ -63,12 +63,12 @@ html, body {
 }
 .cash-wrap { display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .cash {
-  background: linear-gradient(180deg, #f7d774, #e2a535);
+  background: #e8d5a3;
   color: #3a2208;
   padding: 8px 16px; border-radius: 22px;
   font-weight: 800; font-size: 1.2rem;
-  border: 2px solid #fff3c4;
-  box-shadow: 0 4px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.5);
+  border: 2px solid #a89070;
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
   min-height: 44px;
   display: flex; align-items: center;
 }
@@ -98,8 +98,8 @@ html, body {
 }
 .btn.reward {
   width: auto; padding: 0 16px; font-size: 1rem; font-weight: 700;
-  background: linear-gradient(135deg, #7b3fa0, #b15de0);
-  border-color: rgba(255,200,255,.3);
+  background: #5c3d6e;
+  border-color: rgba(200,180,160,.25);
 }
 .btn.pulse-once {
   animation: shopPulse 0.9s ease-in-out 3;
@@ -110,8 +110,8 @@ html, body {
 }
 .btn.wide {
   width: 100%; height: 52px; margin-top: 14px; font-size: 1.05rem; font-weight: 800;
-  background: linear-gradient(180deg, #f39c12, #e67e22);
-  border: 1px solid #ffd27a;
+  background: linear-gradient(180deg, #8f7350, #c9a227);
+  border: 1px solid #a89070;
 }
 
 .hint-banner {
@@ -122,7 +122,7 @@ html, body {
   width: min(540px, calc(100% - 24px));
   display: flex; align-items: center; gap: 10px;
   background: rgba(16,8,4,.78);
-  border: 2px solid rgba(255,210,90,.55);
+  border: 2px solid #a89070;
   border-radius: 16px;
   padding: 10px 14px;
   box-shadow: 0 6px 20px rgba(0,0,0,.4);
@@ -136,8 +136,8 @@ html, body {
 }
 .hint-step {
   flex: 0 0 auto;
-  background: linear-gradient(180deg, #ffb347, #ff7a18);
-  color: #3a1800;
+  background: linear-gradient(180deg, #c9a227, #8f7350);
+  color: #3a2208;
   font-weight: 800;
   font-size: .8rem;
   padding: 6px 10px;
@@ -156,7 +156,7 @@ html, body {
 }
 
 #tutorialArrow {
-  position: absolute; font-size: 2.2rem; color: #ffe566;
+  position: absolute; font-size: 2.2rem; color: #d4a574;
   text-shadow: 0 2px 8px #000; animation: bounce 0.7s ease-in-out infinite;
   pointer-events: none; z-index: 15;
   transform: translate(-50%, -50%);
@@ -183,11 +183,11 @@ html, body {
 }
 #joyKnob {
   width: 56px; height: 56px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffe08a, #f0a020);
+  background: #d4a574;
   position: absolute; left: 50%; top: 50%;
   transform: translate(-50%, -50%);
-  box-shadow: 0 3px 10px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.5);
-  border: 2px solid #fff3c4;
+  box-shadow: 0 3px 10px rgba(0,0,0,.45);
+  border: 2px solid #a89070;
 }
 
 /* —— Modals / shop —— */
@@ -199,8 +199,8 @@ html, body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 .panel {
-  background: linear-gradient(180deg, #4a2c18, #2a180c);
-  border: 2px solid #f0a020;
+  background: linear-gradient(180deg, rgba(28,18,12,.92), rgba(20,12,8,.95));
+  border: 2px solid #a89070;
   border-radius: 20px;
   padding: 20px 18px;
   width: min(400px, 94vw);
@@ -209,7 +209,7 @@ html, body {
   box-shadow: 0 16px 48px rgba(0,0,0,.55);
 }
 .panel h2 {
-  margin-bottom: 14px; text-align: center; color: #ffd36a;
+  margin-bottom: 14px; text-align: center; color: #d4b896;
   font-size: 1.35rem;
 }
 .shop-item {
@@ -235,10 +235,10 @@ html, body {
 .shop-item button {
   border: none; border-radius: 12px; padding: 10px 12px;
   min-height: 44px; min-width: 76px;
-  background: linear-gradient(180deg, #2ecc71, #1e9e54);
+  background: linear-gradient(180deg, #5a8f6b, #3d6b4f);
   color: #fff; font-weight: 800; cursor: pointer;
   white-space: nowrap; font-size: .95rem;
-  box-shadow: 0 2px 0 #166534;
+  box-shadow: 0 2px 0 #2a4a35;
 }
 .shop-item button:disabled {
   background: #555; opacity: .65; cursor: not-allowed;
@@ -286,7 +286,7 @@ html, body {
 .order-bubble {
   position: absolute;
   transform: translate(-50%, -100%);
-  background: #fff;
+  background: #f7f1e8;
   color: #222;
   border-radius: 12px;
   padding: 4px 8px 6px;
@@ -303,7 +303,7 @@ html, body {
   bottom: -6px;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-top-color: #fff;
+  border-top-color: #f7f1e8;
   border-bottom: 0;
 }
 .order-bubble .patience {
@@ -316,7 +316,7 @@ html, body {
 .order-bubble .patience > i {
   display: block;
   height: 100%;
-  background: #2ecc71;
+  background: #5a8f6b;
 }
 
 #floatLayer {
@@ -374,9 +374,9 @@ html, body {
   box-shadow: 0 4px 12px rgba(0,0,0,.3);
   border: 2px solid transparent;
 }
-.order-card.warn { border-color: #f1c40f; }
+.order-card.warn { border-color: #c9a227; }
 .order-card.urgent {
-  border-color: #e74c3c;
+  border-color: #b54a3a;
   animation: cardPulse 0.7s ease-in-out infinite;
 }
 @keyframes cardPulse {
@@ -392,7 +392,7 @@ html, body {
 .order-card .oc-bar > i { display: block; height: 100%; }
 
 .order-bubble.urgent {
-  box-shadow: 0 0 0 2px #e74c3c, 0 4px 12px rgba(0,0,0,.35);
+  box-shadow: 0 0 0 2px #b54a3a, 0 4px 12px rgba(0,0,0,.35);
 }
 
 #toastHost {
@@ -407,8 +407,8 @@ html, body {
 }
 .toast {
   background: linear-gradient(180deg, #3a2414, #24160c);
-  border: 2px solid #f0a020;
-  color: #ffe9b0;
+  border: 2px solid #a89070;
+  color: #f3ebe0;
   font-weight: 800;
   font-size: 1rem;
   padding: 10px 16px;
@@ -448,23 +448,23 @@ html, body {
 
 /* BP HUD */
 .rest-level {
-  background: rgba(20,10,6,.7);
-  border: 1px solid rgba(255,200,80,.35);
+  background: rgba(28,18,12,.72);
+  border: 1px solid #a89070;
   border-radius: 14px;
   padding: 6px 10px;
   min-width: 160px;
   backdrop-filter: blur(4px);
 }
-.rl-top { display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:.85rem; color:#ffd36a; }
+.rl-top { display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:.85rem; color:#d4b896; }
 .rl-bar, .mh-bar { height:8px; border-radius:6px; background:#3a2414; overflow:hidden; margin-top:4px; }
 .rl-bar > i, .mh-bar > i {
   display:block; height:100%; width:0%;
-  background: linear-gradient(90deg, #f5a623, #ff6b35);
+  background: linear-gradient(90deg, #8f7350, #c9a227);
   transition: width .2s;
 }
 .mission-hud {
-  background: rgba(20,10,6,.62);
-  border: 1px solid rgba(120,200,255,.3);
+  background: rgba(28,18,12,.72);
+  border: 1px solid #a89070;
   border-radius: 14px;
   padding: 6px 10px;
   min-width: 160px;
