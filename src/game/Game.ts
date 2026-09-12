@@ -534,8 +534,7 @@ export class Game {
     const body = document.getElementById('offlineBody');
     if (body) body.textContent = tf('offlineBody', { cash: this._offlineCash });
     modal?.classList.remove('hidden');
-    this.paused = true;
-    gameplayStop();
+    this.setPaused(true);
   }
 
   claimOffline(mult: number) {
@@ -544,8 +543,7 @@ export class Game {
     this.state.sessionEarned += n;
     this._offlineCash = 0;
     document.getElementById('offlineModal')?.classList.add('hidden');
-    this.paused = false;
-    gameplayStart();
+    this.setPaused(false);
     this.updateHUD();
     this.saveLocal();
   }
@@ -587,6 +585,8 @@ export class Game {
     document.getElementById('offlineClaim')?.addEventListener('click', () => this.claimOffline(1));
     document.getElementById('offlineX2')?.addEventListener('click', async () => {
       this.setPaused(true);
+      // setPaused early-returns if already paused — still force mute before rewarded
+      sfx.setPauseMute(true);
       const ok = await showRewarded();
       this.claimOffline(ok ? 2 : 1);
     });
