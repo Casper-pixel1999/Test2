@@ -139,3 +139,34 @@ export function saveLocal(data: MetaSave) {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch (_) {}
 }
+
+/** Cloud version is usable only at v3+ (BP save). Legacy/empty cloud must not migrate over local. */
+export function cloudVersionOk(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const v = Number((raw as Record<string, unknown>).version);
+  return Number.isFinite(v) && v >= 3;
+}
+
+/**
+ * Merge cloud into local by lastSeenAt (newer wins).
+ * Never wipe builtPads/padPaid with empty cloud data; skip legacy cloud entirely.
+ */
+export function mergeCloudSave(local: MetaSave, cloudRaw: unknown): MetaSave {
+  if (!cloudVersionOk(cloudRaw)) return local;
+  const cloud = migrateSave(cloudRaw);
+  const localTs = Number(local.lastSeenAt) || 0;
+  const cloudTs = Number(cloud.lastSeenAt) || 0;
+  const newer = cloudTs >= localTs ? cloud : local;
+  const older = cloudTs >= localTs ? local : cloud;
+  const out: MetaSave = { ...newer };
+  if ((!out.builtPads || out.builtPads.length === 0) && older.builtPads?.length) {
+    out.builtPads = older.builtPads.slice();
+  }
+  const outPaidKeys = out.padPaid ? Object.keys(out.padPaid).length : 0;
+  const olderPaidKeys = older.padPaid ? Object.keys(older.padPaid).length : 0;
+  if (outPaidKeys === 0 && olderPaidKeys > 0) {
+    out.padPaid = { ...older.padPaid };
+  }
+  return out;
+}
+

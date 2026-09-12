@@ -13,7 +13,7 @@ import {
   levelFromXp, xpProgress, unlocksForLevel,
   playerUpCost, playerUpXp, PAY,
 } from './progress';
-import { MetaSave, loadLocal, saveLocal as persistSave, migrateSave } from './save';
+import { MetaSave, loadLocal, saveLocal as persistSave, mergeCloudSave } from './save';
 
 const SKINS = ['#f1c27d', '#ffdeb4', '#e0ac69', '#c68642', '#8d5524'];
 /** Fixed muted cloth palette (no rainbow HSL) */
@@ -48,11 +48,12 @@ interface Player {
 interface StationSolid { x: number; z: number; hw: number; hd: number }
 interface InteractPad { x: number; z: number; r: number }
 interface Worker {
-  type: 'waiter' | 'cleaner';
+  type: 'waiter' | 'cleaner' | 'cook' | 'cashier';
   x: number; z: number;
   carrying: BurgerCounts; task: any;
   facing: number; walk: number;
   carryingTrash: boolean;
+  carryingPatties: number;
 }
 type CustTrait = 'regular' | 'hurried' | 'vip';
 interface Customer {
@@ -116,6 +117,7 @@ export class Game {
   _toastCheese = false;
   _toastDouble = false;
   _mismatchHint = false;
+  _cashierCd = 0;
   _hrNear = 0;
   _pupNear = 0;
   _hrOpen = false;
@@ -252,15 +254,20 @@ export class Game {
   applyUnlocks() {
     this.applyBuilds();
     this.workers = [];
+    const w0 = (): Omit<Worker, 'type' | 'x' | 'z'> => ({
+      carrying: emptyBurgers(), task: null, facing: 1, walk: 0, carryingTrash: false, carryingPatties: 0,
+    });
     if (this.state.hasWaiter) {
-      this.workers.push({
-        type: 'waiter', x: -4, z: 0, carrying: emptyBurgers(), task: null, facing: 1, walk: 0, carryingTrash: false,
-      });
+      this.workers.push({ type: 'waiter', x: -4, z: 0, ...w0() });
     }
     if (this.state.hasCleaner) {
-      this.workers.push({
-        type: 'cleaner', x: 1, z: 3.5, carrying: emptyBurgers(), task: null, facing: 1, walk: 0, carryingTrash: false,
-      });
+      this.workers.push({ type: 'cleaner', x: 1, z: 3.5, ...w0() });
+    }
+    if (this.state.hasCook) {
+      this.workers.push({ type: 'cook', x: this.layout.grill.x, z: this.layout.grill.interact.z, ...w0() });
+    }
+    if (this.state.hasCashier) {
+      this.workers.push({ type: 'cashier', x: this.layout.counter.x + 0.4, z: this.layout.counter.z + 0.6, ...w0() });
     }
     this.world.syncTables();
     this.world.syncWorkers(this.workers);
@@ -594,7 +601,7 @@ export class Game {
     this.load();
     const cloud = await cloudLoad();
     if (cloud && typeof cloud === 'object') {
-      this.state = migrateSave({ ...this.state, ...cloud, version: (cloud as any).version ?? this.state.version });
+      this.state = mergeCloudSave(this.state, cloud);
       this.applyUnlocks();
       if (this.state.tutorialDone) this.tutorialStep = 5;
     }
@@ -1098,12 +1105,19 @@ export class Game {
       c.patience -= dt;
     });
     const counter = this.layout.counter;
+    // Manual till: player in counter zone. Auto till: hired cashier and/or cashier_desk pad.
+    const autoTill = !!this.state.hasCashier || this.hasPad('cashier_desk');
+    if (this.state.hasCashier) this._cashierCd = Math.max(0, this._cashierCd - dt);
     if (queued.length) {
       const c = queued[0];
       const spot0 = this.world.queueSpots[0];
       const need = c.order;
       const hasMatch = (counter.burgers[need] | 0) > 0;
-      if (hasMatch && dist(c, spot0) < 0.6) {
+      const playerTill = this.inCounterZone();
+      const tillOk = playerTill || autoTill;
+      // Cashier auto-serves every ~1.35s; player at till serves immediately
+      const rateOk = playerTill || !this.state.hasCashier || this._cashierCd <= 0;
+      if (hasMatch && dist(c, spot0) < 0.6 && tillOk && rateOk) {
         const free = unlocked.find((tb) => !tb.customer && !tb.dirty);
         if (free) {
           takeBurger(counter.burgers, need);
@@ -1124,6 +1138,7 @@ export class Game {
           sfx.play('pay');
           this.world.punchCounter();
           this._mismatchHint = false;
+          if (this.state.hasCashier && !playerTill) this._cashierCd = 1.35;
         }
       } else if (!hasMatch && burgerSum(counter.burgers) > 0) {
         // wrong types sitting — soft hint later
@@ -1175,7 +1190,56 @@ export class Game {
     for (const w of this.workers) {
       if (w.type === 'waiter') this.updateWaiter(w, dt);
       if (w.type === 'cleaner') this.updateCleaner(w, dt);
+      if (w.type === 'cook') this.updateCook(w, dt);
+      if (w.type === 'cashier') this.updateCashier(w, dt);
     }
+  }
+
+  /** Cook AI: place empty grill slots, take ready into hands, deposit to prep. */
+  updateCook(w: Worker, dt: number) {
+    const g = this.layout.grill;
+    const prep = this.layout.prep;
+    const gi = g.interact;
+    const cap = Math.min(4, this.carryCap());
+    if ((w.carryingPatties | 0) <= 0) {
+      this.moveEntity(w, gi.x, gi.z, 2.9, dt);
+      if (dist(w, gi) < 0.85) {
+        const slots = this.grillSlotCount();
+        for (let i = 0; i < slots; i++) {
+          const s = g.slots[i];
+          if (s.state === 'empty') {
+            s.state = 'cooking';
+            s.progress = 0;
+            break;
+          }
+        }
+        for (let i = 0; i < slots; i++) {
+          const s = g.slots[i];
+          if (s.state === 'ready' && w.carryingPatties < cap) {
+            s.state = 'empty';
+            s.progress = 0;
+            w.carryingPatties++;
+            this._prevReady[i] = false;
+          }
+        }
+      }
+    } else {
+      this.moveEntity(w, prep.interact.x, prep.interact.z, 2.9, dt);
+      if (dist(w, prep.interact) < 0.85) {
+        prep.patties += w.carryingPatties;
+        w.carryingPatties = 0;
+        sfx.play('assemble');
+      }
+    }
+  }
+
+  /** Cashier stands at till; serve tick is handled in updateCustomers. */
+  updateCashier(w: Worker, dt: number) {
+    const c = this.layout.counter;
+    const tx = c.x + 0.35;
+    const tz = c.z + 0.55;
+    this.moveEntity(w, tx, tz, 2.6, dt);
+    if (dist(w, { x: tx, z: tz }) < 0.2) w.walk = 0;
   }
 
   updateWaiter(w: Worker, dt: number) {
@@ -1531,7 +1595,7 @@ export class Game {
     this.world.syncTables(this.dt);
     this.world.syncCustomers(this.customers, this.time);
     for (const w of this.workers) {
-      (w as any)._vizCarry = burgerSum(w.carrying);
+      (w as any)._vizCarry = burgerSum(w.carrying) + (w.carryingPatties | 0);
     }
     this.world.syncWorkers(this.workers);
     this.world.updatePlayerStack(this.player.patties, burgersToStack(this.player.burgers));

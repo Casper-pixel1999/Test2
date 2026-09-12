@@ -1135,6 +1135,7 @@ export class World3D {
       const role =
         w.type === 'cleaner' ? { shirt: 0x5c3d6e, hat: 'cap' as const, apron: false as boolean | number }
         : w.type === 'cook' ? { shirt: 0xd4a070, hat: 'chef' as const, apron: true as boolean | number }
+        : w.type === 'cashier' ? { shirt: 0x3d5a80, hat: 'bow' as const, apron: 0x2a3a4a as boolean | number }
         : { shirt: 0x4a7a6a, hat: 'bow' as const, apron: 0x2a4a3a as boolean | number }; // waiter
       m = makeCharacter({
         shirt: role.shirt,
