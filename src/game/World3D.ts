@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
-import { box, cyl, makeCharacter, makePatty, makeBurgerMesh, makeSmokeParticle } from './meshes';
+import { box, cyl, makeCharacter, setCharPose, makePatty, makeBurgerMesh, makeSmokeParticle } from './meshes';
 import { t, tf, getLang } from '../i18n';
 
 export type StationKind = 'grill' | 'prep' | 'counter' | 'table' | 'trash';
@@ -809,15 +809,25 @@ export class World3D {
   }
 
   createPlayer() {
-    this.playerMesh = makeCharacter({ shirt: 0xf4f6f7, hat: 'chef', scale: 1.05 });
+    this.playerMesh = makeCharacter({
+      shirt: 0xf4f6f7,
+      hat: 'chef',
+      apron: true,
+      scale: 1.05,
+    });
+    const prop = this.playerMesh.userData.parts?.propHand as THREE.Group | undefined;
     this.playerStack = new THREE.Group();
-    this.playerStack.position.y = 1.55;
-    this.playerMesh.add(this.playerStack);
+    this.playerStack.name = 'stack';
+    if (prop) prop.add(this.playerStack);
+    else {
+      this.playerStack.position.set(0, 1.15, 0.34);
+      this.playerMesh.add(this.playerStack);
+    }
     this.root.add(this.playerMesh);
     return this.playerMesh;
   }
 
-  setPlayerPose(x: number, z: number, facing: number, walk: number, moving: boolean) {
+  setPlayerPose(x: number, z: number, facing: number, walk: number, moving: boolean, carry = false) {
     if (!this.playerMesh) return;
     const mesh = this.playerMesh;
     if (mesh.userData.vizX == null) {
@@ -835,19 +845,13 @@ export class World3D {
     mesh.userData.vizYaw = cur + diff * 0.22;
     mesh.position.set(mesh.userData.vizX, 0, mesh.userData.vizZ);
     mesh.rotation.y = mesh.userData.vizYaw;
-    const bob = moving ? Math.sin(walk) * 0.04 : 0;
-    const parts = this.playerMesh.userData.bobParts;
-    if (parts) {
-      parts.body.position.y = 0.35 + 0.25 + bob;
-      parts.head.position.y = 0.85 + 0.14 + bob;
-      if (moving) {
-        parts.legL.rotation.x = Math.sin(walk) * 0.45;
-        parts.legR.rotation.x = -Math.sin(walk) * 0.45;
-      } else {
-        parts.legL.rotation.x *= 0.8;
-        parts.legR.rotation.x *= 0.8;
-      }
-    }
+    const holding = carry || this.playerStack.children.length > 0;
+    setCharPose(mesh, {
+      moving,
+      carry: holding,
+      t: walk,
+      serve: this.counterPunchT > 0,
+    });
   }
 
   updatePlayerStack(patties: number, burgers: ('classic' | 'cheese' | 'double')[] | number) {
@@ -1082,31 +1086,37 @@ export class World3D {
     }
     for (const c of customers) {
       const mesh = this.ensureCustomerMesh(c);
-      mesh.position.set(c.x, c.state === 'eating' ? -0.15 : 0, c.z);
+      mesh.position.set(c.x, c.state === 'eating' ? -0.12 : 0, c.z);
       mesh.rotation.y = (c.facing ?? 1) >= 0 ? 0.3 : Math.PI - 0.3;
       mesh.visible = true;
       const moving = c.state === 'toTable' || c.state === 'leave';
-      const parts = mesh.userData.bobParts;
-      if (parts && moving) {
-        const w = time * 10 + c.x;
-        parts.legL.rotation.x = Math.sin(w) * 0.4;
-        parts.legR.rotation.x = -Math.sin(w) * 0.4;
-      }
+      const phase = moving ? time * 10 + (c.x || 0) : time * 2.2 + (c.x || 0);
+      setCharPose(mesh, { moving, carry: false, t: phase });
     }
   }
 
   ensureWorkerMesh(w: any) {
     let m = this.workerMeshes.get(w);
     if (!m) {
+      // Role = tint / hat / apron only — shared skeleton
+      const role =
+        w.type === 'cleaner' ? { shirt: 0x5c3d6e, hat: 'cap' as const, apron: false as boolean | number }
+        : w.type === 'cook' ? { shirt: 0xd4a070, hat: 'chef' as const, apron: true as boolean | number }
+        : { shirt: 0x4a7a6a, hat: 'bow' as const, apron: 0x2a4a3a as boolean | number }; // waiter
       m = makeCharacter({
-        shirt: w.type === 'waiter' ? 0x4a7a6a : 0x5c3d6e,
-        hat: w.type === 'cleaner' ? 'cap' : 'bow',
-        scale: 0.95,
+        shirt: role.shirt,
+        hat: role.hat,
+        apron: role.apron || undefined,
+        scale: 0.98,
       });
       const stack = new THREE.Group();
       stack.name = 'stack';
-      stack.position.y = 1.45;
-      m.add(stack);
+      const prop = m.userData.parts?.propHand as THREE.Group | undefined;
+      if (prop) prop.add(stack);
+      else {
+        stack.position.set(0, 1.1, 0.34);
+        m.add(stack);
+      }
       this.workerMeshes.set(w, m);
       this.root.add(m);
     }
@@ -1126,15 +1136,22 @@ export class World3D {
       mesh.position.set(w.x, 0, w.z);
       mesh.rotation.y = (w.facing ?? 1) >= 0 ? 0.3 : Math.PI - 0.3;
       const stack = mesh.getObjectByName('stack') as THREE.Group;
+      const carryN = w.carrying || 0;
       if (stack) {
         while (stack.children.length) stack.remove(stack.children[0]);
-        for (let i = 0; i < (w.carrying || 0); i++) {
+        for (let i = 0; i < carryN; i++) {
           const b = makeBurgerMesh();
-          b.position.y = i * 0.2;
-          b.scale.setScalar(0.65);
+          b.position.y = i * 0.18;
+          b.scale.setScalar(0.62);
           stack.add(b);
         }
       }
+      const moving = (w.walk || 0) > 0.05;
+      setCharPose(mesh, {
+        moving,
+        carry: carryN > 0,
+        t: w.walk || 0,
+      });
     }
   }
 

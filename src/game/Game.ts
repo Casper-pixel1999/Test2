@@ -583,7 +583,7 @@ export class Game {
       patties: 0, burgers: emptyBurgers(), dirty: 0, facing: 1, walk: 0,
     };
     this.world.createPlayer();
-    this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, 0, false);
+    this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, 0, false, false);
     this.applyBuilds();
     this.running = true;
     this.paused = false;
@@ -789,7 +789,8 @@ export class Game {
     this.player.x = nx;
     this.player.z = nz;
 
-    this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, this.player.walk, moving);
+    const carrying = this.player.patties > 0 || burgerSum(this.player.burgers) > 0;
+    this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, this.player.walk, moving, carrying);
     this.world.followCamera(this.player.x, this.player.z, dt);
     this.autoInteract(dt);
   }
