@@ -683,7 +683,7 @@ export class World3D {
     const pads: Pad[] = [
       { x: -8.0, z: -1.5, color: 0xb54a3a, kind: 'grill' },
       { x: -8.0, z: 3.1, color: 0xc9a227, kind: 'prep' },
-      { x: -0.5, z: 0.0, color: 0x5a8f6b, kind: 'counter' },
+      { x: -3.7, z: 0.0, color: 0x5a8f6b, kind: 'counter' },
       { x: -11.0, z: 3.5, color: 0xa89070, r: 0.9, kind: 'trash' },
     ];
     this.tables.forEach((tb, i) => {

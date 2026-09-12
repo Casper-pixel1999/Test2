@@ -174,7 +174,7 @@ export class Game {
       },
       counter: {
         x: -2.2, z: 0.0, r: 1.8, burgers: emptyBurgers(),
-        interact: { x: -0.5, z: 0.0, r: 1.35 },
+        interact: { x: -3.7, z: 0.0, r: 1.35 },
         solid: { x: -2.2, z: 0.0, hw: 1.5, hd: 0.7 },
       },
       trash: {
