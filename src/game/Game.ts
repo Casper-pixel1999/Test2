@@ -341,34 +341,13 @@ export class Game {
     if (moving) this.player.walk += dt * (10 + Math.hypot(this.player.vx, this.player.vz));
     else this.player.walk *= 0.88;
 
-    // Separate axis collision so you slide along counters instead of entering them
+    // No solid collision — walk-through furniture; zones gate interactions
     this.player.x = clamp(this.player.x + this.player.vx * dt, -8.8, 8.8);
-    this.resolveSolids('x');
     this.player.z = clamp(this.player.z + this.player.vz * dt, -5.2, 5.2);
-    this.resolveSolids('z');
 
     this.world.setPlayerPose(this.player.x, this.player.z, this.player.facing, this.player.walk, moving);
     this.world.followCamera(this.player.x, this.player.z, dt);
     this.autoInteract(dt);
-  }
-
-  resolveSolids(axis: 'x' | 'z') {
-    const pr = 0.38;
-    for (const s of this.solids) {
-      const dx = this.player.x - s.x;
-      const dz = this.player.z - s.z;
-      const ox = s.hw + pr - Math.abs(dx);
-      const oz = s.hd + pr - Math.abs(dz);
-      if (ox > 0 && oz > 0) {
-        if (axis === 'x' && ox < oz) {
-          this.player.x += dx > 0 ? ox : -ox;
-          this.player.vx = 0;
-        } else if (axis === 'z' && oz <= ox) {
-          this.player.z += dz > 0 ? oz : -oz;
-          this.player.vz = 0;
-        }
-      }
-    }
   }
 
   nearPad(pad: InteractPad, padExtra = 0) {
@@ -404,11 +383,20 @@ export class Game {
     return best;
   }
 
+  inGrillZone() { return this.nearPad(this.layout.grill.interact); }
+  inPrepZone() { return this.nearPad(this.layout.prep.interact); }
+  inCounterZone() { return this.nearPad(this.layout.counter.interact); }
+  inTableZone(tb: { x: number; z: number }) {
+    return dist(this.player, { x: tb.x, z: tb.z - 0.95 }) < 1.15;
+  }
+
   autoInteract(_dt: number) {
     const g = this.layout.grill;
     const prep = this.layout.prep;
     const counter = this.layout.counter;
-    if (this.nearPad(g.interact)) {
+
+    // Grill zone: only while standing in the circle — start empty slots & pick ready
+    if (this.inGrillZone()) {
       for (const s of g.slots) {
         if (s.state === 'empty') {
           s.state = 'cooking';
@@ -426,7 +414,9 @@ export class Game {
         }
       }
     }
-    if (this.nearPad(prep.interact)) {
+
+    // Prep zone: drop patties / take burgers only while inside
+    if (this.inPrepZone()) {
       if (this.player.patties > 0) {
         prep.patties += this.player.patties;
         this.player.patties = 0;
@@ -444,15 +434,19 @@ export class Game {
         if (this.tutorialStep <= 2) this.tutorialStep = 3;
       }
     }
-    if (this.nearPad(counter.interact) && this.player.burgers > 0) {
+
+    // Counter zone: deposit burgers only while inside
+    if (this.inCounterZone() && this.player.burgers > 0) {
       counter.burgers += this.player.burgers;
       this.player.burgers = 0;
       this.float('→ 🍽️', this.player.x, this.player.z);
       if (this.tutorialStep <= 3) this.tutorialStep = 4;
     }
+
+    // Dirty tables: clean only while in front-zone
     for (const tb of this.world.tables) {
       if (!tb.unlocked || !tb.dirty) continue;
-      if (dist(this.player, { x: tb.x, z: tb.z - 0.95 }) < 1.15) {
+      if (this.inTableZone(tb)) {
         tb.dirty = false;
         this.state.cash += 3;
         this.float('+$3', tb.x, tb.z, '#2ecc71');
@@ -467,6 +461,8 @@ export class Game {
   tryInteract() { this.autoInteract(0); }
 
   updateGrill(dt: number) {
+    // Meat cooks ONLY while player stands in the grill circle; leave = pause
+    if (!this.inGrillZone()) return;
     const need = this.grillCookTime();
     for (const s of this.layout.grill.slots) {
       if (s.state === 'cooking') {
@@ -479,6 +475,7 @@ export class Game {
       }
     }
   }
+
 
   updateCustomers(dt: number) {
     this.spawnTimer -= dt;
