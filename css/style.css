@@ -1,0 +1,141 @@
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: #1a0f0a;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #fff;
+  touch-action: none;
+  user-select: none;
+}
+#app {
+  position: relative;
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+#game {
+  display: block;
+  max-width: 100%; max-height: 100%;
+  width: auto; height: auto;
+  background: #3d2914;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+}
+#loading {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(160deg, #2a1508, #1a0f0a 60%);
+  gap: 16px;
+}
+#loading .logo { font-size: 2.2rem; font-weight: 800; letter-spacing: .02em; }
+#loading .bar {
+  width: min(260px, 70vw); height: 10px; border-radius: 6px;
+  background: #3a2414; overflow: hidden;
+}
+#loadBar {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #f5a623, #ff6b35);
+  transition: width .2s;
+}
+#loadText { opacity: .8; font-size: .95rem; }
+
+#hud {
+  position: absolute; inset: 0; pointer-events: none; z-index: 10;
+}
+#hud .hud-top {
+  position: absolute; top: 8px; left: 8px; right: 8px;
+  display: flex; align-items: center; gap: 8px;
+  pointer-events: auto;
+}
+.cash {
+  background: rgba(0,0,0,.55); padding: 8px 14px; border-radius: 20px;
+  font-weight: 700; font-size: 1.1rem; backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,200,80,.35);
+}
+.hint {
+  flex: 1; text-align: center; font-size: .85rem;
+  background: rgba(0,0,0,.4); padding: 6px 10px; border-radius: 12px;
+  min-height: 1.6em;
+}
+.btn {
+  pointer-events: auto;
+  border: none; cursor: pointer;
+  background: rgba(0,0,0,.55); color: #fff;
+  width: 44px; height: 44px; border-radius: 12px;
+  font-size: 1.2rem; backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,.15);
+}
+.btn:active { transform: scale(.95); }
+.btn.reward {
+  width: auto; padding: 0 12px; font-size: .9rem;
+  background: linear-gradient(135deg, #6b2d8b, #9b4dca);
+}
+.btn.wide {
+  width: 100%; height: 48px; margin-top: 12px; font-size: 1rem;
+  background: #e67e22;
+}
+#tutorialArrow {
+  position: absolute; font-size: 2rem; color: #ffe566;
+  text-shadow: 0 2px 8px #000; animation: bounce 0.7s ease-in-out infinite;
+  pointer-events: none; z-index: 15;
+  transform: translate(-50%, -50%);
+}
+@keyframes bounce {
+  0%, 100% { transform: translate(-50%, -60%); }
+  50% { transform: translate(-50%, -40%); }
+}
+
+#joystick {
+  position: absolute; left: 24px; bottom: 24px; z-index: 20;
+  pointer-events: auto;
+}
+#joyBase {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(0,0,0,.35); border: 2px solid rgba(255,255,255,.25);
+  position: relative;
+}
+#joyKnob {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255,200,80,.85);
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+}
+
+.modal {
+  position: absolute; inset: 0; z-index: 40;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto;
+}
+.panel {
+  background: linear-gradient(180deg, #3d2414, #2a180c);
+  border: 2px solid #e67e22; border-radius: 16px;
+  padding: 20px; width: min(360px, 92vw); max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5);
+}
+.panel h2 { margin-bottom: 14px; text-align: center; color: #ffc857; }
+.shop-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 10px 12px; margin-bottom: 8px;
+  background: rgba(0,0,0,.35); border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.shop-item .info { flex: 1; }
+.shop-item .name { font-weight: 700; }
+.shop-item .desc { font-size: .8rem; opacity: .75; margin-top: 2px; }
+.shop-item button {
+  border: none; border-radius: 10px; padding: 8px 12px;
+  background: #27ae60; color: #fff; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.shop-item button:disabled {
+  background: #555; opacity: .6; cursor: not-allowed;
+}
+.hidden { display: none !important; }
+
+@media (max-width: 700px) {
+  #joystick { left: 12px; bottom: 12px; }
+  #joyBase { width: 100px; height: 100px; }
+  #joyKnob { width: 44px; height: 44px; }
+  .cash { font-size: 1rem; padding: 6px 10px; }
+}

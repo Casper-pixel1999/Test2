@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a0f0a" />
+  <title>Бургерная</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="loading">
+      <div class="logo">🍔 Бургерная</div>
+      <div class="bar"><div id="loadBar"></div></div>
+      <p id="loadText">Загрузка…</p>
+    </div>
+
+    <canvas id="game" width="960" height="640"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="cash" id="cashDisplay">💰 0</div>
+        <div class="hint" id="hintText"></div>
+        <button type="button" id="btnShop" class="btn">🛒</button>
+        <button type="button" id="btnReward" class="btn reward" title="x2">🎬 x2</button>
+        <button type="button" id="btnLang" class="btn">RU</button>
+      </div>
+      <div id="tutorialArrow" class="hidden">▼</div>
+    </div>
+
+    <div id="joystick" class="hidden">
+      <div id="joyBase"><div id="joyKnob"></div></div>
+    </div>
+
+    <div id="shop" class="modal hidden">
+      <div class="panel">
+        <h2 id="shopTitle">Улучшения</h2>
+        <div id="shopList"></div>
+        <button type="button" id="btnCloseShop" class="btn wide">Закрыть</button>
+      </div>
+    </div>
+
+    <div id="pauseOverlay" class="modal hidden">
+      <div class="panel">
+        <h2 id="pauseTitle">Пауза</h2>
+        <p id="pauseHint">Игра на паузе</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/sdk.js" onerror="window.__sdkMissing=true"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
